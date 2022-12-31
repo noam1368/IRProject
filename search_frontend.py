@@ -26,12 +26,12 @@ def search():
         list of up to 100 search results, ordered from best to worst where each 
         element is a tuple (wiki_id, title).
     '''
-    res = []
-    query = request.args.get('query', '')
-    if len(query) == 0:
-      return jsonify(res)
+    # res = []
+    # query = request.args.get('query', '')
+    # if len(query) == 0:
+    #   return jsonify(res)
     # BEGIN SOLUTION
-
+    res="hello"
     # END SOLUTION
     return jsonify(res)
 
@@ -51,12 +51,13 @@ def search_body():
         list of up to 100 search results, ordered from best to worst where each 
         element is a tuple (wiki_id, title).
     '''
-    res = []
-    query = request.args.get('query', '')
-    if len(query) == 0:
-      return jsonify(res)
+    # res = []
+    # query = request.args.get('query', '')
+    # if len(query) == 0:
+    #   return jsonify(res)
     # BEGIN SOLUTION
 
+    res = "hello"
     # END SOLUTION
     return jsonify(res)
 
