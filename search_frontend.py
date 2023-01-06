@@ -41,10 +41,13 @@ RE_WORD = re.compile(r"""[\#\@\w](['\-]?\w){2,24}""", re.UNICODE)
 indexTiltePathNoam="./indexes-my-proj/indexTitles.pkl/"
 indexTextPathNoam="./indexes-my-proj/indexTexts.pkl/"
 indexAnchorPathNoam="./indexes-my-proj/indexAnchors.pkl/" #todo
+dlPathNoam = './indexes-my-proj/dl.pkl'
 # postingsGcpPathNoam="./indexes-my-proj/postings_gcp/"
 id_titlePathNoam="./indexes-my-proj/id_title/part-00000-93004c08-4631-4e8b-9f56-4def1ff49509-c000.csv.gz/"
 page_views_path = "./indexes-my-proj/pageviews-202108-user.pkl"
 page_rank_path = "./indexes-my-proj/page-rank/part-00000-88749e01-b371-4d47-8aa9-7fa2ed8b5932-c000.csv.gz"
+
+
 
 # indexTitle= InvertedIndex.read_index(indexTiltePath, "index_title")
 # indexText=InvertedIndex.read_index(indexTextPath, "index")#todo
@@ -52,6 +55,7 @@ page_rank_path = "./indexes-my-proj/page-rank/part-00000-88749e01-b371-4d47-8aa9
 indexTitle= InvertedIndex.read_index(indexTiltePathNoam, "indecTitles")
 indexText=InvertedIndex.read_index(indexTextPathNoam, "indexTexts")#todo
 indexAnchor=InvertedIndex.read_index(indexAnchorPathNoam, "indexAnchor")
+
 
 
 f= gzip.open(id_titlePathNoam, 'rb')
@@ -64,9 +68,9 @@ with open(page_views_path, 'rb') as f:
 fi= gzip.open(page_rank_path, 'rb')
 page_rank = fi.read()
 
-# with open(postingsGcpPath, 'rb') as pkl:#nf todo delete this comment
-#     # postings_norm=pickle.load(pkl)
-#     DL = pickle.load(pkl)
+with open(dlPathNoam, 'rb') as f:
+  DL = pickle.loads(f.read())
+
 
 ############################################################################
 
@@ -208,7 +212,7 @@ def search():
     # BEGIN SOLUTION
     tokens = tokenize(query.lower())
     #we are doing the assumption that the search on the text is inuf to tell what is the best 100
-    #todo maybe think about weight to the title and text like ass 4
+    ##todo maybe think about weight to the title and text like ass 4
     tokens_after_filter = [token for token in tokens if token in indexText.df[token] < 250000 and indexText.df] #todo change the number according to number we see warking good
     bestDocs = query_get_top_N_tfidf(indexText,tokens_after_filter,100)
     res = get_docs_title_by_id(bestDocs)
