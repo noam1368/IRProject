@@ -1,3 +1,4 @@
+import gzip
 from collections import Counter, OrderedDict
 import pandas as pd
 import re
@@ -32,27 +33,40 @@ RE_WORD = re.compile(r"""[\#\@\w](['\-]?\w){2,24}""", re.UNICODE)
 
 #todo change the paths
 #this is the read of the indexes we made before in the storage of the cloud
-indexTiltePath="./indexes_bucket/indexTitle.parquet/"
-indexTextPath="./indexes_bucket/indexText.parquet/"
-indexAnchorPath="./indexes_bucket/indexTextPath/" #todo
-postingsGcpPath="./indexes_bucket/postings_gcp/"
+# indexTiltePath="./indexes_bucket/indexTitle.parquet/"
+# indexTextPath="./indexes_bucket/indexText.parquet/"
+# indexAnchorPath="./indexes_bucket/indexTextPath/" #todo
+# postingsGcpPath="./indexes_bucket/postings_gcp/"
 # indexPageViews = "./indexes_bucket/postings_gcp/" #todo
+indexTiltePathNoam="./indexes-my-proj/indexTitles.pkl/"
+indexTextPathNoam="./indexes-my-proj/indexTexts.pkl/"
+indexAnchorPathNoam="./indexes-my-proj/indexAnchors.pkl/" #todo
+# postingsGcpPathNoam="./indexes-my-proj/postings_gcp/"
+id_titlePathNoam="./indexes-my-proj/id_title/part-00000-93004c08-4631-4e8b-9f56-4def1ff49509-c000.csv.gz/"
+page_views_path = "./indexes-my-proj/pageviews-202108-user.pkl"
+page_rank_path = "./indexes-my-proj/page-rank/part-00000-88749e01-b371-4d47-8aa9-7fa2ed8b5932-c000.csv.gz"
+
+# indexTitle= InvertedIndex.read_index(indexTiltePath, "index_title")
+# indexText=InvertedIndex.read_index(indexTextPath, "index")#todo
+# indexAnchor=InvertedIndex.read_index(indexAnchorPath, "index_anchor")
+indexTitle= InvertedIndex.read_index(indexTiltePathNoam, "indecTitles")
+indexText=InvertedIndex.read_index(indexTextPathNoam, "indexTexts")#todo
+indexAnchor=InvertedIndex.read_index(indexAnchorPathNoam, "indexAnchor")
 
 
-indexTitle= InvertedIndex.read_index(indexTiltePath, "index_title")
-indexText=InvertedIndex.read_index(indexTextPath, "index")#todo
-indexAnchor=InvertedIndex.read_index(indexAnchorPath, "index_anchor")
+f= gzip.open(id_titlePathNoam, 'rb')
+titles = f.read()
 
-#we store the values of all the wikipedia docs
-with open(indexTiltePath, 'rb') as pkl:
-    docs_titles=pickle.load(pkl) # titlesDocs todo delete this comment
 
-# with open(indexPageViews, 'rb') as pkl: todo delete this comment
-#     pageviews_wikidamp = pickle.loads(pkl.read())
+with open(page_views_path, 'rb') as f:
+  page_views = pickle.loads(f.read())
 
-with open(postingsGcpPath, 'rb') as pkl:#nf todo delete this comment
-    # postings_norm=pickle.load(pkl)
-    DL = pickle.load(pkl)
+fi= gzip.open(page_rank_path, 'rb')
+page_rank = fi.read()
+
+# with open(postingsGcpPath, 'rb') as pkl:#nf todo delete this comment
+#     # postings_norm=pickle.load(pkl)
+#     DL = pickle.load(pkl)
 
 ############################################################################
 
@@ -60,7 +74,7 @@ def get_docs_title_by_id(lst):
     all_titles = []
     for i,d in enumerate(lst):
         if d[0] in indexTitle:
-            all_titles.append((d[0],docs_titles[d[0]]))
+            all_titles.append((d[0],titles[d[0]]))
 
     return all_titles
 
@@ -138,7 +152,7 @@ def query_get_top_N_tfidf(inverted_index, query_to_search, N = 5):
 
 
 
-def query_get_top_N_tfidf_just_for_Title(inverted_index, query_to_search):
+def query_get_tfidf_for_all_Title(inverted_index, query_to_search):
     """
     Args:
         query_to_search:
@@ -252,9 +266,9 @@ def search_title():
       return jsonify(res)
     # BEGIN SOLUTION
     tokens = tokenize(query.lower())
-    bestDocs = query_get_top_N_tfidf_just_for_Title(indexTitle,tokens) #here we don't want to filter the tokens becuase the titles are small not like text
+    bestDocs = query_get_tfidf_for_all_Title(indexTitle,tokens) #here we don't want to filter the tokens becuase the titles are small not like text
     bestDocs.sort(key = lambda x:x[1], reverse = True)
-    res = bestDocs
+    res = bestDocs[:100]
     # END SOLUTION
     return jsonify(res)
 
@@ -280,8 +294,11 @@ def search_anchor():
     query = request.args.get('query', '')
     if len(query) == 0:
       return jsonify(res)
-    # BEGIN SOLUTION
-    
+    # # BEGIN SOLUTION
+    # tokens = tokenize(query.lower())
+    # bestDocs = query_get_tfidf_for_all_Title_or_Anchors(indexAnchor,tokens) #here we don't want to filter the tokens becuase the titles are small not like text
+    # bestDocs.sort(key = lambda x:x[1], reverse = True)
+    # res = bestDocs[:100]
     # END SOLUTION
     return jsonify(res)
 
@@ -302,11 +319,13 @@ def get_pagerank():
           list of PageRank scores that correrspond to the provided article IDs.
     '''
     res = []
+    # dict_scores = pagerank['page rank'].to_dict()
     wiki_ids = request.get_json()
     if len(wiki_ids) == 0:
       return jsonify(res)
     # BEGIN SOLUTION
-
+    for id in wiki_ids:
+        res.append(page_rank.get(id, 0))
     # END SOLUTION
     return jsonify(res)
 
@@ -333,7 +352,8 @@ def get_pageview():
     if len(wiki_ids) == 0:
       return jsonify(res)
     # BEGIN SOLUTION
-
+    for id in wiki_ids:
+        res.append(page_views.get(id, 0))
     # END SOLUTION
     return jsonify(res)
 
