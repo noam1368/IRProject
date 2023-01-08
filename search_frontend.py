@@ -61,62 +61,85 @@ RE_WORD = re.compile(r"""[\#\@\w](['\-]?\w){2,24}""", re.UNICODE)
 
 #todo change the paths
 #this is the read of the indexes we made before in the storage of the cloud
-# indexTiltePathNoam="./indexes-my-proj/indexTitles.pkl/"
-# indexTextPathNoam="./indexes-my-proj/indexTexts.pkl/"
-# indexAnchorPathNoam="./indexes-my-proj/indexAnchors.pkl/" #todo
-# dlPathNoam = './indexes-my-proj/dl.pkl'
-# # postingsGcpPathNoam="./indexes-my-proj/postings_gcp/"
-# id_titlePathNoam="./indexes-my-proj/id_title/part-00000-93004c08-4631-4e8b-9f56-4def1ff49509-c000.csv.gz/"
-# page_views_path = "./indexes-my-proj/pageviews-202108-user.pkl"
-# page_rank_path = "./indexes-my-proj/page-rank/part-00000-88749e01-b371-4d47-8aa9-7fa2ed8b5932-c000.csv.gz"
-
-
-# indexTiltePathOfek="./indexes_bucket/indexTitles.pkl/"
-# indexTextPathOfek="./indexes_bucket/indexTexts.pkl/"
-# indexAnchorPathOfek="./indexes_bucket/indexAnchors.pkl/" #todo
-
-dir = "./indexes_bucket"
-dlPathOfek = './indexes_bucket/dl.pkl'
+dir = "gs://indexes-my-proj"
+dlPath = '/dl.pkl'
 # postingsGcpPathNoam="./indexes-my-proj/postings_gcp/"
-id_titlePathOfek="./indexes_bucket/id_title/part-00000-93004c08-4631-4e8b-9f56-4def1ff49509-c000.csv.gz/"
-page_views_path = "./indexes_bucket/pageviews-202108-user.pkl"
-page_rank_path = "./indexes_bucket/page-rank/part-00000-88749e01-b371-4d47-8aa9-7fa2ed8b5932-c000.csv.gz"
+id_titlePath="/id_titles/part-00000-93004c08-4631-4e8b-9f56-4def1ff49509-c000.csv.gz"
+
+page_views_path = "/pageviews-202108-user.pkl"
+page_rank_path = "/page-rank/part-00000-88749e01-b371-4d47-8aa9-7fa2ed8b5932-c000.csv.gz"
+
+# indexTitle= InvertedIndex.read_index(dir, "indexTitles")
+# indexText=InvertedIndex.read_index(dir, "indexTexts")
+# indexAnchor=InvertedIndex.read_index(dir, "indexAnchors")
+
+#making local variable
+bucket_name = 'indexes-my-proj'
+client = storage.Client()
+bucket = client.bucket(bucket_name)
 
 
+#TEXT
+index_src = "indexTexts.pkl"
+blob_index = bucket.blob(f"{index_src}")
+pickel_in = blob_index.download_as_string()
+indexText = pickle.loads(pickel_in)
 
-# indexTitle= InvertedIndex.read_index(indexTiltePath, "index_title")
-# indexText=InvertedIndex.read_index(indexTextPath, "index")#todo
-# indexAnchor=InvertedIndex.read_index(indexAnchorPath, "index_anchor")
+#Title
+index_src = "indexTitles.pkl"
+blob_index = bucket.blob(f"{index_src}")
+pickel_in = blob_index.download_as_string()
+indexTitle = pickle.loads(pickel_in)
 
-indexTitle= InvertedIndex.read_index(dir, "indexTitles")
-indexText=InvertedIndex.read_index(dir, "indexTexts")
-indexAnchor=InvertedIndex.read_index(dir, "indexAnchors")
+#Anchor
+index_src = "indexAnchors.pkl"
+blob_index = bucket.blob(f"{index_src}")
+pickel_in = blob_index.download_as_string()
+indexAnchor = pickle.loads(pickel_in)
+
+#pageviews-202108-user
+index_src = "pageviews-202108-user.pkl"
+blob_index = bucket.blob(f"{index_src}")
+pickel_in = blob_index.download_as_string()
+page_views = pickle.loads(pickel_in)
+
+#pageviews-202108-user
+index_src = "dl.pkl"
+blob_index = bucket.blob(f"{index_src}")
+pickel_in = blob_index.download_as_string()
+DL = pickle.loads(pickel_in)
 
 
+#
+# f= gzip.open(dir + id_titlePathOfek, 'rb')
+# titles = f.read()
 
-f= gzip.open(id_titlePathOfek, 'rb')
-titles = f.read()
+# with gzip.open("gs://indexes-my-proj/id_titles/part-00000-93004c08-4631-4e8b-9f56-4def1ff49509-c000.csv.gz", 'rb') as f:
+#     titles = f.read()
 
+# titles = pd.read_csv("./indexes-my-proj/id_titles/part-00000-93004c08-4631-4e8b-9f56-4def1ff49509-c000.csv.gz", compression='gzip', header=0, sep=' ', quotechar='"', error_bad_lines=False)
 
-with open(page_views_path, 'rb') as f:
-  page_views = pickle.loads(f.read())
-
-fi= gzip.open(page_rank_path, 'rb')
-page_rank = fi.read()
-
-with open(dlPathOfek, 'rb') as f:
-  DL = pickle.loads(f.read())
+# with open(dir + page_views_path, 'rb') as f:
+#   page_views = pickle.loads(f.read())
+#
+# # fi= gzip.open(dir + page_rank_path, 'rb')
+# # page_rank = fi.read()
+# # with gzip.open(dir + page_rank_path, 'rb') as f:
+# #     page_rank = f.read()
+#
+# with open(dir + dlPath, 'rb') as f:
+#   DL = pickle.loads(f.read())
 
 
 ############################################################################
 
-def get_docs_title_by_id(lst):
-    all_titles = []
-    for i,d in enumerate(lst):
-        if d[0] in indexTitle:
-            all_titles.append((d[0],titles[d[0]]))
-
-    return all_titles
+# def get_docs_title_by_id(lst):
+#     all_titles = []
+#     for i,d in enumerate(lst):
+#         if d[0] in indexTitle:
+#             all_titles.append((d[0],titles[d[0]]))
+#
+#     return all_titles
 
 
 
@@ -174,7 +197,7 @@ def query_get_top_N_tfidf(inverted_index, query_to_search, N = 5):
     query_length = len(query_to_search)
 
     for token in np.unique(query_to_search):
-        if token in inverted_index.term_total.keys():  # avoid terms that do not appear in the index.
+        if token in inverted_index.df.keys():  # avoid terms that do not appear in the index.
             tf = counter[token] / query_length  #term frequency divded by the length of the query
             df = inverted_index.df[token]
             idf = math.log((DL_length) / (df + epsilon), 10)  #todo ass4 -> make save DL in memory We save a dictionary named DL, which fetches the document length of each document.
@@ -250,7 +273,8 @@ def search():
     #we are doing the assumption that the search on the text is inuf to tell what is the best 100
     ##todo maybe think about weight to the title and text like ass 4
     tokens_after_filter = [token for token in tokens if token in indexText.df[token] < 250000 and indexText.df] #todo change the number according to number we see warking good
-    # bestDocs = query_get_top_N_tfidf(indexText,tokens_after_filter,100)
+    bestDocs = query_get_top_N_tfidf(indexText,tokens_after_filter,100)
+    res = bestDocs
     # res = get_docs_title_by_id(bestDocs)
     # END SOLUTION
     return jsonify(res)
