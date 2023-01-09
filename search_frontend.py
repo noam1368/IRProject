@@ -159,13 +159,14 @@ def tokenize(text):
                       token.group() not in english_stopwords]
     return list_of_tokens
 
-def posting_lists_reader(inverted_index, term): # work 2
+def posting_lists_reader(inverted_index, term ,prefix): # work 2
     """  reads one posting list from disk in byte and convert to int
         return:
             [(doc_id:int, tf:int), ...].
     """
     with closing(MultiFileReader()) as reader:
         locs = inverted_index.posting_locs[term]
+        locs = [(prefix+v[0],v[1]) for v in locs]
         b = reader.read(locs, inverted_index.df[term] * TUPLE_SIZE)# convert the bytes read into `b` to a proper posting list.
         posting_list = []
 
@@ -196,8 +197,12 @@ def query_get_top_N_tfidf(inverted_index, query_to_search, N = 5):
     DL_length = len(DL)
     query_length = len(query_to_search)
 
+    print(query_to_search)
+
     for token in np.unique(query_to_search):
+        print("outside: ", token)
         if token in inverted_index.df.keys():  # avoid terms that do not appear in the index.
+            print("inside: ", token)
             tf = counter[token] / query_length  #term frequency divded by the length of the query
             df = inverted_index.df[token]
             idf = math.log((DL_length) / (df + epsilon), 10)  #todo ass4 -> make save DL in memory We save a dictionary named DL, which fetches the document length of each document.
@@ -214,7 +219,7 @@ def query_get_top_N_tfidf(inverted_index, query_to_search, N = 5):
 
 
 
-
+title_prefix = "posting_locs/posting_title"
 def query_get_tfidf_for_all_Title(inverted_index, query_to_search):
     """
     Args:
@@ -228,7 +233,7 @@ def query_get_tfidf_for_all_Title(inverted_index, query_to_search):
     for token in query_to_search:
         term = inverted_index.df.get(token)
         if term:
-            docs = posting_lists_reader(inverted_index,token)
+            docs = posting_lists_reader(inverted_index,token,title_prefix)
             for doc_id, doc_tf in docs:
                 result[doc_id] = result.get((doc_id, token), 0) + doc_tf
 
@@ -272,8 +277,8 @@ def search():
     tokens = tokenize(query.lower())
     #we are doing the assumption that the search on the text is inuf to tell what is the best 100
     ##todo maybe think about weight to the title and text like ass 4
-    tokens_after_filter = [token for token in tokens if token in indexText.df[token] < 250000 and indexText.df] #todo change the number according to number we see warking good
-    bestDocs = query_get_top_N_tfidf(indexText,tokens_after_filter,100)
+    #tokens_after_filter = [token for token in tokens if token in indexText.df[token] < 250000 and indexText.df] #todo change the number according to number we see warking good
+    bestDocs = query_get_top_N_tfidf(indexText,tokens,100)
     res = bestDocs
     # res = get_docs_title_by_id(bestDocs)
     # END SOLUTION
@@ -330,9 +335,9 @@ def search_title():
       return jsonify(res)
     # BEGIN SOLUTION
     tokens = tokenize(query.lower())
-    # bestDocs = query_get_tfidf_for_all_Title(indexTitle,tokens) #here we don't want to filter the tokens becuase the titles are small not like text
-    # bestDocs.sort(key = lambda x:x[1], reverse = True)
-    # res = bestDocs[:100]
+    bestDocs = query_get_tfidf_for_all_Title(indexTitle,tokens) #here we don't want to filter the tokens becuase the titles are small not like text
+    bestDocs.sort(key = lambda x:x[1], reverse = True)
+    res = bestDocs[:100]
     # END SOLUTION
     return jsonify(res)
 
