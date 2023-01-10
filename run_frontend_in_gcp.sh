@@ -19,7 +19,7 @@ gcloud compute addresses create $IP_NAME --project=$PROJECT_NAME --region=$REGIO
 gcloud compute addresses list
 # note the IP address printed above, that's your extrenal IP address.
 # Enter it here: 
-INSTANCE_IP="34.72.138.135"
+INSTANCE_IP="35.192.205.59"
 
 # 2. Create Firewall rule to allow traffic to port 8080 on the instance
 gcloud compute firewall-rules create default-allow-http-8080 \
@@ -51,16 +51,16 @@ gcloud compute scp inverted_index_gcp.py $GOOGLE_ACCOUNT_NAME@$INSTANCE_NAME:/ho
 #start the machine
 #gcloud compute instances start $INSTANCE_NAME
 
-# Copy the files from the bucket to your local machine do it from inside the instance
-gsutil cp -r gs://posting_locations .
-# Connect to the Compute Engine instance
-#gcloud compute ssh $INSTANCE_NAME
+
+
 # Copy the files from your local machine to the instance
-gcloud compute scp --recurse posting_locations $INSTANCE_NAME:~/
+#gcloud compute scp --recurse posting_locations $INSTANCE_NAME:~/
 
 
 # 5. SSH to your VM and start the app
 gcloud compute ssh $GOOGLE_ACCOUNT_NAME@$INSTANCE_NAME
+# Copy the files from the bucket to your local machine do it from inside the instance
+gsutil cp -r gs://posting_locations .
 #installs
 pip install pyspark
 pip install pandas

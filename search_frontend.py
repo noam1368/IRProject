@@ -31,33 +31,6 @@ corpus_stopwords = ["category", "references", "also", "external", "links",
 all_stopwords = english_stopwords.union(corpus_stopwords) #this is containing all the stop words
 RE_WORD = re.compile(r"""[\#\@\w](['\-]?\w){2,24}""", re.UNICODE)
 
-########################################################
-#making local variable
-# bucket_name = 'indexes_bucket'
-# client = storage.Client()
-# bucket = client.bucket(bucket_name)
-# body index from bucket
-
-#read one index
-
-# #TEXT
-# index_src = "indexTexts.pkl"
-# blob_index = bucket.blob(f"{bucket_name}/{index_src}")
-# pickel_in = blob_index.download_as_string()
-# indexText = pickle.loads(pickel_in)
-#
-# #Title
-# index_src = "indexTitles.pkl"
-# blob_index = bucket.blob(f"{bucket_name}/{index_src}")
-# pickel_in = blob_index.download_as_string()
-# indexTitle = pickle.loads(pickel_in)
-#
-# #Anchor
-# index_src = "indexAnchors.pkl"
-# blob_index = bucket.blob(f"{bucket_name}/{index_src}")
-# pickel_in = blob_index.download_as_string()
-# indexAnchor = pickle.loads(pickel_in)
-########################################################
 
 #todo change the paths
 #this is the read of the indexes we made before in the storage of the cloud
@@ -109,37 +82,28 @@ blob_index = bucket.blob(f"{index_src}")
 pickel_in = blob_index.download_as_string()
 DL = pickle.loads(pickel_in)
 
+#page_rank
+index_src = "page_rank/page_rank.pkl"
+blob_index = bucket.blob(f"{index_src}")
+pickel_in = blob_index.download_as_string()
+page_ranks = pickle.loads(pickel_in)
 
-#
-# f= gzip.open(dir + id_titlePathOfek, 'rb')
-# titles = f.read()
-
-# with gzip.open("gs://indexes-my-proj/id_titles/part-00000-93004c08-4631-4e8b-9f56-4def1ff49509-c000.csv.gz", 'rb') as f:
-#     titles = f.read()
-
-# titles = pd.read_csv("./indexes-my-proj/id_titles/part-00000-93004c08-4631-4e8b-9f56-4def1ff49509-c000.csv.gz", compression='gzip', header=0, sep=' ', quotechar='"', error_bad_lines=False)
-
-# with open(dir + page_views_path, 'rb') as f:
-#   page_views = pickle.loads(f.read())
-#
-# # fi= gzip.open(dir + page_rank_path, 'rb')
-# # page_rank = fi.read()
-# # with gzip.open(dir + page_rank_path, 'rb') as f:
-# #     page_rank = f.read()
-#
-# with open(dir + dlPath, 'rb') as f:
-#   DL = pickle.loads(f.read())
+#id_titles
+index_src = "id_titles/id_titles.pkl"
+blob_index = bucket.blob(f"{index_src}")
+pickel_in = blob_index.download_as_string()
+titles = pickle.loads(pickel_in)
 
 
 ############################################################################
 
-# def get_docs_title_by_id(lst):
-#     all_titles = []
-#     for i,d in enumerate(lst):
-#         if d[0] in indexTitle:
-#             all_titles.append((d[0],titles[d[0]]))
-#
-#     return all_titles
+def get_docs_title_by_id(lst):
+    all_titles = []
+    for i,d in enumerate(lst):
+        if d[0] in indexTitle:
+            all_titles.append((d[0],titles[d[0]]))
+
+    return all_titles
 
 
 
@@ -239,7 +203,28 @@ def query_get_tfidf_for_all_Title(inverted_index, query_to_search):
             for doc_id, doc_tf in docs:
                 result[doc_id] = result.get((doc_id, token), 0) + doc_tf
 
-    return result.items()
+    return result
+
+
+Anchor_prefix = "posting_locations/posting_anchor/"
+def query_get_tfidf_for_all_Anchor(inverted_index, query_to_search):
+    """
+    Args:
+        query_to_search:
+        index:
+
+    Returns:
+
+    """
+    result = {}  # result[doc_id] = score now it will be according to the number of frequency of the word inside the title sum of doc_tf.
+    for token in query_to_search:
+        term = inverted_index.df.get(token)
+        if term:
+            docs = posting_lists_reader(inverted_index,token,Anchor_prefix)
+            for doc_id, doc_tf in docs:
+                result[doc_id] = result.get((doc_id, token), 0) + doc_tf
+
+    return result
 
 
 
@@ -282,7 +267,7 @@ def search():
     #tokens_after_filter = [token for token in tokens if token in indexText.df[token] < 250000 and indexText.df] #todo change the number according to number we see warking good
     bestDocs = query_get_top_N_tfidf(indexText,tokens,100)
     res = bestDocs
-    # res = get_docs_title_by_id(bestDocs)
+    #res = get_docs_title_by_id(bestDocs)
     # END SOLUTION
     return jsonify(res)
 
@@ -308,9 +293,10 @@ def search_body():
       return jsonify(res)
     # BEGIN SOLUTION
     tokens = tokenize(query.lower())
-    tokens_after_filter = [token for token in tokens if token in indexText.df[token] < 250000 and indexText.df] #todo change the number according to number we see warking good
-    # bestDocs = query_get_top_N_tfidf(indexText,tokens_after_filter,100)
-    # res = get_docs_title_by_id(bestDocs)
+    #tokens_after_filter = [token for token in tokens if token in indexText.df[token] < 250000 and indexText.df] #todo change the number according to number we see warking good
+    bestDocs = query_get_top_N_tfidf(indexText,tokens,100)
+    #res = get_docs_title_by_id(bestDocs)
+    res = bestDocs
     # END SOLUTION
     return jsonify(res)
 
@@ -337,9 +323,10 @@ def search_title():
       return jsonify(res)
     # BEGIN SOLUTION
     tokens = tokenize(query.lower())
-    bestDocs = list(query_get_tfidf_for_all_Title(indexTitle,tokens)) #here we don't want to filter the tokens becuase the titles are small not like text
-    bestDocs.sort(key = lambda x:x[1], reverse = True)
-    res = bestDocs[:100]
+    bestDocs = Counter(query_get_tfidf_for_all_Title(indexTitle,tokens)).most_common() #here we don't want to filter the tokens becuase the titles are small not like text
+    #bestDocs.sort(key = lambda x:x[1], reverse = True)
+    #res = get_docs_title_by_id(bestDocs)
+    res = bestDocs
     # END SOLUTION
     return jsonify(res)
 
@@ -366,10 +353,11 @@ def search_anchor():
     if len(query) == 0:
       return jsonify(res)
     # # BEGIN SOLUTION
-    # tokens = tokenize(query.lower())
-    # bestDocs = query_get_tfidf_for_all_Title_or_Anchors(indexAnchor,tokens) #here we don't want to filter the tokens becuase the titles are small not like text
-    # bestDocs.sort(key = lambda x:x[1], reverse = True)
-    # res = bestDocs[:100]
+    tokens = tokenize(query.lower())
+    bestDocs = Counter(query_get_tfidf_for_all_Anchor(indexAnchor,tokens)).most_common() #here we don't want to filter the tokens becuase the titles are small not like text
+    #bestDocs.sort(key = lambda x:x[1], reverse = True)
+    #res = get_docs_title_by_id(bestDocs)
+    res = bestDocs
     # END SOLUTION
     return jsonify(res)
 
@@ -396,7 +384,7 @@ def get_pagerank():
       return jsonify(res)
     # BEGIN SOLUTION
     for id in wiki_ids:
-        res.append(page_rank.get(id, 0))
+        res.append(page_ranks.get(id, 0))
     # END SOLUTION
     return jsonify(res)
 
