@@ -1,9 +1,9 @@
-INSTANCE_NAME="instance-1"
+﻿INSTANCE_NAME="instance-1"
 REGION=us-central1
 ZONE=us-central1-c
-PROJECT_NAME="assignment-3-370813"
+PROJECT_NAME="ass3-370307"
 IP_NAME="$PROJECT_NAME-ip"
-GOOGLE_ACCOUNT_NAME="noamax" # without the @post.bgu.ac.il or @gmail.com part
+GOOGLE_ACCOUNT_NAME="ofeklut" # without the @post.bgu.ac.il or @gmail.com part
 
 # 0. Install Cloud SDK on your local machine or using Could Shell
 # check that you have a proper active account listed
@@ -11,15 +11,15 @@ gcloud auth list
 # check that the right project and zone are active
 gcloud config list
 # if not set them
-# gcloud config set project $PROJECT_NAME
-# gcloud config set compute/zone $ZONE
+gcloud config set project $PROJECT_NAME
+gcloud config set compute/zone $ZONE
 
 # 1. Set up public IP
 gcloud compute addresses create $IP_NAME --project=$PROJECT_NAME --region=$REGION
 gcloud compute addresses list
 # note the IP address printed above, that's your extrenal IP address.
 # Enter it here: 
-INSTANCE_IP="35.184.241.41"
+INSTANCE_IP="34.72.138.135"
 
 # 2. Create Firewall rule to allow traffic to port 8080 on the instance
 gcloud compute firewall-rules create default-allow-http-8080 \
@@ -36,21 +36,36 @@ gcloud compute instances create $INSTANCE_NAME \
   --scopes=https://www.googleapis.com/auth/cloud-platform \
   --tags=http-server
 # monitor instance creation log using this command. When done (4-5 minutes) terminate using Ctrl+C
+#חשוב שהשינויים של זיכרון הדיסק של האינסטנס יעשו לפני הנקודה הזו אחרת הוא לא יכול להיכנס לאינסטנס
 gcloud compute instances tail-serial-port-output $INSTANCE_NAME --zone $ZONE
 
 # 4. Secure copy your app to the VM
-gcloud compute scp LOCAL_PATH_TO/search_frontend.py $GOOGLE_ACCOUNT_NAME@$INSTANCE_NAME:/home/$GOOGLE_ACCOUNT_NAME
+#gcloud compute scp LOCAL_PATH_TO/search_frontend.py $GOOGLE_ACCOUNT_NAME@$INSTANCE_NAME:/home/$GOOGLE_ACCOUNT_NAME
 gcloud compute scp search_frontend.py $GOOGLE_ACCOUNT_NAME@$INSTANCE_NAME:/home/$GOOGLE_ACCOUNT_NAME
+gcloud compute scp inverted_index_gcp.py $GOOGLE_ACCOUNT_NAME@$INSTANCE_NAME:/home/$GOOGLE_ACCOUNT_NAME
 
 #stop machine before change type of machine
 #gcloud compute instances stop $INSTANCE_NAME
 #change machine 
-# gcloud compute instances set-machine-type $INSTANCE_NAME --machine-type e2-standard-4
+#gcloud compute instances set-machine-type $INSTANCE_NAME --machine-type e2-standard-4
 #start the machine
 #gcloud compute instances start $INSTANCE_NAME
 
+# Copy the files from the bucket to your local machine do it from inside the instance
+gsutil cp -r gs://posting_locations .
+# Connect to the Compute Engine instance
+#gcloud compute ssh $INSTANCE_NAME
+# Copy the files from your local machine to the instance
+gcloud compute scp --recurse posting_locations $INSTANCE_NAME:~/
+
+
 # 5. SSH to your VM and start the app
 gcloud compute ssh $GOOGLE_ACCOUNT_NAME@$INSTANCE_NAME
+#installs
+pip install pyspark
+pip install pandas
+pip install nltk
+#run
 python3 search_frontend.py
 
 ################################################################################
@@ -62,3 +77,25 @@ gcloud compute instances list
 gcloud compute firewall-rules delete -q default-allow-http-8080
 # delete external addresses
 gcloud compute addresses delete -q $IP_NAME --region $REGION
+
+
+
+
+
+
+#####
+
+rm search_frontend.py
+exit
+rm search_frontend.py
+#now upload manually
+gcloud compute scp search_frontend.py $GOOGLE_ACCOUNT_NAME@$INSTANCE_NAME:/home/$GOOGLE_ACCOUNT_NAME
+gcloud compute ssh $GOOGLE_ACCOUNT_NAME@$INSTANCE_NAME
+ls
+python3 search_frontend.py
+
+
+
+
+
+ gcloud compute ssh --zone $ZONE --project $PROJECT_NAME --tunnel-through-iap $INSTANCE_NAME

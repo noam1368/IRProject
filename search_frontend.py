@@ -61,7 +61,7 @@ RE_WORD = re.compile(r"""[\#\@\w](['\-]?\w){2,24}""", re.UNICODE)
 
 #todo change the paths
 #this is the read of the indexes we made before in the storage of the cloud
-dir = "gs://indexes-my-proj"
+dir = "gs://indexes_bucket"
 dlPath = '/dl.pkl'
 # postingsGcpPathNoam="./indexes-my-proj/postings_gcp/"
 id_titlePath="/id_titles/part-00000-93004c08-4631-4e8b-9f56-4def1ff49509-c000.csv.gz"
@@ -74,7 +74,7 @@ page_rank_path = "/page-rank/part-00000-88749e01-b371-4d47-8aa9-7fa2ed8b5932-c00
 # indexAnchor=InvertedIndex.read_index(dir, "indexAnchors")
 
 #making local variable
-bucket_name = 'indexes-my-proj'
+bucket_name = 'indexes_bucket'
 client = storage.Client()
 bucket = client.bucket(bucket_name)
 
@@ -181,6 +181,8 @@ def posting_lists_reader(inverted_index, term ,prefix): # work 2
 def get_top_n(lst, N = 5): #sort the list according to the x[1] and return the top N
     return sorted(lst, key= lambda x:x[1], reverse=True)[:N]
 
+
+text_prefix = "posting_locations/posting_text/"
 def query_get_top_N_tfidf(inverted_index, query_to_search, N = 5):
     """
 
@@ -206,7 +208,7 @@ def query_get_top_N_tfidf(inverted_index, query_to_search, N = 5):
             tf = counter[token] / query_length  #term frequency divded by the length of the query
             df = inverted_index.df[token]
             idf = math.log((DL_length) / (df + epsilon), 10)  #todo ass4 -> make save DL in memory We save a dictionary named DL, which fetches the document length of each document.
-            docs = posting_lists_reader(inverted_index,token) #will return the list of docs, from byte to  [(doc_id:int, tf:int), ...]
+            docs = posting_lists_reader(inverted_index,token,text_prefix) #will return the list of docs, from byte to  [(doc_id:int, tf:int), ...]
             Q = tf*idf
 
             for doc_id, doc_tf in docs:
@@ -219,7 +221,7 @@ def query_get_top_N_tfidf(inverted_index, query_to_search, N = 5):
 
 
 
-title_prefix = "posting_locs/posting_title"
+title_prefix = "posting_locations/posting_title/"
 def query_get_tfidf_for_all_Title(inverted_index, query_to_search):
     """
     Args:
@@ -335,7 +337,7 @@ def search_title():
       return jsonify(res)
     # BEGIN SOLUTION
     tokens = tokenize(query.lower())
-    bestDocs = query_get_tfidf_for_all_Title(indexTitle,tokens) #here we don't want to filter the tokens becuase the titles are small not like text
+    bestDocs = list(query_get_tfidf_for_all_Title(indexTitle,tokens)) #here we don't want to filter the tokens becuase the titles are small not like text
     bestDocs.sort(key = lambda x:x[1], reverse = True)
     res = bestDocs[:100]
     # END SOLUTION
