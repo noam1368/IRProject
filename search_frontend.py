@@ -89,18 +89,18 @@ pickel_in = blob_index.download_as_string()
 page_ranks = pickle.loads(pickel_in)
 
 #id_titles
-index_src = "id_titles/id_titles.pkl"
-blob_index = bucket.blob(f"{index_src}")
-pickel_in = blob_index.download_as_string()
-titles = pickle.loads(pickel_in)
+#index_src = "id_title2/id_titles.pkl"
+#blob_index = bucket.blob(f"{index_src}")
+#pickel_in = blob_index.download_as_string()
+#titles = pickle.loads(pickel_in)
 
 
 ############################################################################
 
 def get_docs_title_by_id(lst):
     all_titles = []
-    for i,d in enumerate(lst):
-        if d[0] in indexTitle:
+    for id,no in enumerate(lst):
+        if id in titles:
             all_titles.append((d[0],titles[d[0]]))
 
     return all_titles
@@ -180,6 +180,7 @@ def query_get_top_N_tfidf(inverted_index, query_to_search, N = 5):
                 tfidf = D*Q
                 result[doc_id] = result.get(doc_id, 0) + tfidf
 
+    print(result)
     return get_top_n(result.items(),N)
 
 
@@ -198,12 +199,12 @@ def query_get_tfidf_for_all_Title(inverted_index, query_to_search):
     result = {}  # result[doc_id] = score now it will be according to the number of frequency of the word inside the title sum of doc_tf.
     for token in query_to_search:
         term = inverted_index.df.get(token)
-        if term:
+        if term != None:
             docs = posting_lists_reader(inverted_index,token,title_prefix)
             for doc_id, doc_tf in docs:
-                result[doc_id] = result.get((doc_id, token), 0) + doc_tf
+                result[doc_id] = result.get(doc_id, 0) + doc_tf
 
-    return result
+    return result.items()
 
 
 Anchor_prefix = "posting_locations/posting_anchor/"
@@ -219,10 +220,10 @@ def query_get_tfidf_for_all_Anchor(inverted_index, query_to_search):
     result = {}  # result[doc_id] = score now it will be according to the number of frequency of the word inside the title sum of doc_tf.
     for token in query_to_search:
         term = inverted_index.df.get(token)
-        if term:
+        if term != None:
             docs = posting_lists_reader(inverted_index,token,Anchor_prefix)
             for doc_id, doc_tf in docs:
-                result[doc_id] = result.get((doc_id, token), 0) + doc_tf
+                result[doc_id] = result.get(doc_id, 0) + doc_tf
 
     return result
 
@@ -264,8 +265,8 @@ def search():
     tokens = tokenize(query.lower())
     #we are doing the assumption that the search on the text is inuf to tell what is the best 100
     ##todo maybe think about weight to the title and text like ass 4
-    #tokens_after_filter = [token for token in tokens if token in indexText.df[token] < 250000 and indexText.df] #todo change the number according to number we see warking good
-    bestDocs = query_get_top_N_tfidf(indexText,tokens,100)
+    tokens_after_filter = [term for term in tokens if indexText.df[token] < 400000 and token in indexText.df] #todo change the number according to number we see warking good
+    bestDocs = query_get_top_N_tfidf(indexText,tokens_after_filter,100)
     res = bestDocs
     #res = get_docs_title_by_id(bestDocs)
     # END SOLUTION
@@ -293,8 +294,9 @@ def search_body():
       return jsonify(res)
     # BEGIN SOLUTION
     tokens = tokenize(query.lower())
-    #tokens_after_filter = [token for token in tokens if token in indexText.df[token] < 250000 and indexText.df] #todo change the number according to number we see warking good
-    bestDocs = query_get_top_N_tfidf(indexText,tokens,100)
+     #todo change the number according to number we see warking good
+    tokens_after_filter = [term for term in tokens if indexText.df[token] < 400000 and token in indexText.df]
+    bestDocs = query_get_top_N_tfidf(indexText,tokens_after_filter,100)
     #res = get_docs_title_by_id(bestDocs)
     res = bestDocs
     # END SOLUTION
@@ -317,16 +319,19 @@ def search_title():
         list of ALL (not just top 100) search results, ordered from best to 
         worst where each element is a tuple (wiki_id, title).
     '''
+    print("1111111111111")
     res = []
     query = request.args.get('query', '')
     if len(query) == 0:
       return jsonify(res)
     # BEGIN SOLUTION
     tokens = tokenize(query.lower())
-    bestDocs = Counter(query_get_tfidf_for_all_Title(indexTitle,tokens)).most_common() #here we don't want to filter the tokens becuase the titles are small not like text
-    #bestDocs.sort(key = lambda x:x[1], reverse = True)
+    print(tokens)
+    bestDocs = list(query_get_tfidf_for_all_Title(indexTitle,tokens)) #here we don't want to filter the tokens becuase the titles are small not like text
+    bestDocs.sort(key= lambda x:x[1], reverse=True)
     #res = get_docs_title_by_id(bestDocs)
     res = bestDocs
+    print(res)
     # END SOLUTION
     return jsonify(res)
 
@@ -355,9 +360,8 @@ def search_anchor():
     # # BEGIN SOLUTION
     tokens = tokenize(query.lower())
     bestDocs = Counter(query_get_tfidf_for_all_Anchor(indexAnchor,tokens)).most_common() #here we don't want to filter the tokens becuase the titles are small not like text
-    #bestDocs.sort(key = lambda x:x[1], reverse = True)
-    #res = get_docs_title_by_id(bestDocs)
-    res = bestDocs
+    res = get_docs_title_by_id(bestDocs)
+    #res = bestDocs
     # END SOLUTION
     return jsonify(res)
 
