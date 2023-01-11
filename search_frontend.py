@@ -10,10 +10,11 @@ from pathlib import Path
 from google.cloud import storage
 import math
 from contextlib import closing
+from inverted_index_gcp import *
 from inverted_index_gcp import MultiFileReader
-import inverted_index_gcp
+# import inverted_index_gcp
 import pickle
-from inverted_index_gcp import InvertedIndex
+# from inverted_index_gcp import InvertedIndex
 # from traitlets.traitlets import Long
 ###################
 
@@ -70,38 +71,39 @@ blob_index = bucket.blob(f"{index_src}")
 pickel_in = blob_index.download_as_string()
 indexAnchor = pickle.loads(pickel_in)
 
-#pageviews-202108-user
-index_src = "pageviews-202108-user.pkl"
+#pageview
+index_src = "page_view_currect/page_view.pkl"
 blob_index = bucket.blob(f"{index_src}")
 pickel_in = blob_index.download_as_string()
 page_views = pickle.loads(pickel_in)
 
-#pageviews-202108-user
+#DL
 index_src = "dl.pkl"
 blob_index = bucket.blob(f"{index_src}")
 pickel_in = blob_index.download_as_string()
 DL = pickle.loads(pickel_in)
 
 #page_rank
-index_src = "page_rank/page_rank.pkl"
+index_src = "page_rank_currect/page_rank.pickle"
 blob_index = bucket.blob(f"{index_src}")
 pickel_in = blob_index.download_as_string()
 page_ranks = pickle.loads(pickel_in)
 
 #id_titles
-#index_src = "id_title2/id_titles.pkl"
-#blob_index = bucket.blob(f"{index_src}")
-#pickel_in = blob_index.download_as_string()
-#titles = pickle.loads(pickel_in)
+index_src = "id_title2/id_titles.pkl"
+blob_index = bucket.blob(f"{index_src}")
+pickel_in = blob_index.download_as_string()
+titles = pickle.loads(pickel_in)
 
 
 ############################################################################
 
 def get_docs_title_by_id(lst):
     all_titles = []
-    for id,no in enumerate(lst):
+    for id,no in lst:
         if id in titles:
-            all_titles.append((d[0],titles[d[0]]))
+            all_titles.append((id,titles[id]))
+            # print((id,titles[id]))
 
     return all_titles
 
@@ -120,7 +122,7 @@ def tokenize(text):
     list of tokens (e.g., list of tokens).
     """
     list_of_tokens = [token.group() for token in RE_WORD.finditer(text.lower()) if
-                      token.group() not in english_stopwords]
+                      token.group() not in all_stopwords]
     return list_of_tokens
 
 def posting_lists_reader(inverted_index, term ,prefix): # work 2
@@ -128,6 +130,7 @@ def posting_lists_reader(inverted_index, term ,prefix): # work 2
         return:
             [(doc_id:int, tf:int), ...].
     """
+    print("read")
     with closing(MultiFileReader()) as reader:
         locs = inverted_index.posting_locs[term]
         locs = [(prefix+v[0],v[1]) for v in locs]
@@ -146,7 +149,8 @@ def get_top_n(lst, N = 5): #sort the list according to the x[1] and return the t
     return sorted(lst, key= lambda x:x[1], reverse=True)[:N]
 
 
-text_prefix = "posting_locations/posting_text/"
+# text_prefix = "posting_locations/posting_text/"
+text_prefix = "/content/posting_text/"
 def query_get_top_N_tfidf(inverted_index, query_to_search, N = 5):
     """
 
@@ -160,33 +164,37 @@ def query_get_top_N_tfidf(inverted_index, query_to_search, N = 5):
     result = {}  # result[doc_id] = score
     epsilon = .0000001
     counter = Counter(query_to_search)
-    DL_length = len(DL)
     query_length = len(query_to_search)
+
+    query_vec_2 = 0
+    for w in np.unique(query_to_search):
+        query_vec_2 += counter[w]**2
+
+
 
     print(query_to_search)
 
     for token in np.unique(query_to_search):
-        print("outside: ", token)
+        print(token)
         if token in inverted_index.df.keys():  # avoid terms that do not appear in the index.
-            print("inside: ", token)
-            tf = counter[token] / query_length  #term frequency divded by the length of the query
-            df = inverted_index.df[token]
-            idf = math.log((DL_length) / (df + epsilon), 10)  #todo ass4 -> make save DL in memory We save a dictionary named DL, which fetches the document length of each document.
-            docs = posting_lists_reader(inverted_index,token,text_prefix) #will return the list of docs, from byte to  [(doc_id:int, tf:int), ...]
-            Q = tf*idf
+            docs = posting_lists_reader(inverted_index, token,text_prefix)  # will return the list of docs, from byte to  [(doc_id:int, tf:int), ...]
+            print("inside if ", token)
+            for doc_id, doc_tf_w in docs:
+                simCurrent = counter[token]*doc_tf_w
+                result[doc_id] = result.get(doc_id, 0) + simCurrent
+                # result[doc_id] = result[doc_id] * (1 / ((query_length * DL[doc_id]) + epsilon))
+    #
+    # for doc_id,v in list(result.items()):
+    #     result[doc_id] = result[doc_id] * (1 / ((query_length * DL[doc_id]) + epsilon))
 
-            for doc_id, doc_tf in docs:
-                D = (doc_tf / DL[doc_id]) * math.log(DL_length / inverted_index.df[token], 10)
-                tfidf = D*Q
-                result[doc_id] = result.get(doc_id, 0) + tfidf
 
-    print(result)
-    return get_top_n(result.items(),N)
+    return get_top_n(list(result.items()),N)
 
 
 
 
-title_prefix = "posting_locations/posting_title/"
+# title_prefix = "posting_locations/posting_title/"
+title_prefix = "/content/posting_title/"
 def query_get_tfidf_for_all_Title(inverted_index, query_to_search):
     """
     Args:
@@ -196,15 +204,15 @@ def query_get_tfidf_for_all_Title(inverted_index, query_to_search):
     Returns:
 
     """
-    result = {}  # result[doc_id] = score now it will be according to the number of frequency of the word inside the title sum of doc_tf.
-    for token in query_to_search:
-        term = inverted_index.df.get(token)
-        if term != None:
-            docs = posting_lists_reader(inverted_index,token,title_prefix)
-            for doc_id, doc_tf in docs:
-                result[doc_id] = result.get(doc_id, 0) + doc_tf
+    result = {}
+    for term in query_to_search:
+        if inverted_index.df.get(term):
+            ls_doc_freq = posting_lists_reader(inverted_index, term, title_prefix)
+            for doc, freq in ls_doc_freq:
+                result[doc] = result.get(doc, 0) + 1
+    lst_doc = Counter(result).most_common()
 
-    return result.items()
+    return lst_doc
 
 
 Anchor_prefix = "posting_locations/posting_anchor/"
@@ -217,15 +225,15 @@ def query_get_tfidf_for_all_Anchor(inverted_index, query_to_search):
     Returns:
 
     """
-    result = {}  # result[doc_id] = score now it will be according to the number of frequency of the word inside the title sum of doc_tf.
-    for token in query_to_search:
-        term = inverted_index.df.get(token)
-        if term != None:
-            docs = posting_lists_reader(inverted_index,token,Anchor_prefix)
-            for doc_id, doc_tf in docs:
-                result[doc_id] = result.get(doc_id, 0) + doc_tf
+    result = {}
+    for term in query_to_search:
+        if inverted_index.df.get(term):
+            ls_doc_freq = posting_lists_reader(inverted_index, term, title_prefix)
+            for doc, freq in ls_doc_freq:
+                result[doc] = result.get(doc, 0) + 1
+    lst_doc = Counter(result).most_common()
 
-    return result
+    return lst_doc
 
 
 
@@ -265,10 +273,11 @@ def search():
     tokens = tokenize(query.lower())
     #we are doing the assumption that the search on the text is inuf to tell what is the best 100
     ##todo maybe think about weight to the title and text like ass 4
-    tokens_after_filter = [term for term in tokens if indexText.df[token] < 400000 and token in indexText.df] #todo change the number according to number we see warking good
-    bestDocs = query_get_top_N_tfidf(indexText,tokens_after_filter,100)
-    res = bestDocs
-    #res = get_docs_title_by_id(bestDocs)
+    tokens_after_filter = [term for term in tokens if indexText.df[term] < 400000 and term in indexText.df] #todo change the number according to number we see warking good
+    bestDocs = query_get_top_N_tfidf(indexText,tokens_after_filter,10)
+    # res = bestDocs
+    res = get_docs_title_by_id(bestDocs)
+    print(res)
     # END SOLUTION
     return jsonify(res)
 
@@ -294,12 +303,13 @@ def search_body():
       return jsonify(res)
     # BEGIN SOLUTION
     tokens = tokenize(query.lower())
-     #todo change the number according to number we see warking good
-    tokens_after_filter = [term for term in tokens if indexText.df[token] < 400000 and token in indexText.df]
-    bestDocs = query_get_top_N_tfidf(indexText,tokens_after_filter,100)
-    #res = get_docs_title_by_id(bestDocs)
-    res = bestDocs
+    print("serchhhhhhhh")
+    # tokens_after_filter = [term for term in tokens if indexText.df[term] < 300000 and term in indexText.df]
+    bestDocs = query_get_top_N_tfidf(indexText,tokens,10)
+    res = get_docs_title_by_id(bestDocs)
+    # res = bestDocs
     # END SOLUTION
+    print(res)
     return jsonify(res)
 
 @app.route("/search_title")
@@ -326,12 +336,11 @@ def search_title():
       return jsonify(res)
     # BEGIN SOLUTION
     tokens = tokenize(query.lower())
-    print(tokens)
-    bestDocs = list(query_get_tfidf_for_all_Title(indexTitle,tokens)) #here we don't want to filter the tokens becuase the titles are small not like text
-    bestDocs.sort(key= lambda x:x[1], reverse=True)
-    #res = get_docs_title_by_id(bestDocs)
-    res = bestDocs
-    print(res)
+    bestDocs = query_get_tfidf_for_all_Title(indexTitle, tokens)
+    res = get_docs_title_by_id(bestDocs)
+
+    # res = bestDocs
+    print(res[:5])
     # END SOLUTION
     return jsonify(res)
 
@@ -361,8 +370,9 @@ def search_anchor():
     tokens = tokenize(query.lower())
     bestDocs = Counter(query_get_tfidf_for_all_Anchor(indexAnchor,tokens)).most_common() #here we don't want to filter the tokens becuase the titles are small not like text
     res = get_docs_title_by_id(bestDocs)
-    #res = bestDocs
+    # res = bestDocs
     # END SOLUTION
+    print(res)
     return jsonify(res)
 
 @app.route("/get_pagerank", methods=['POST'])
@@ -390,6 +400,7 @@ def get_pagerank():
     for id in wiki_ids:
         res.append(page_ranks.get(id, 0))
     # END SOLUTION
+    print(res)
     return jsonify(res)
 
 @app.route("/get_pageview", methods=['POST'])
@@ -418,6 +429,7 @@ def get_pageview():
     for id in wiki_ids:
         res.append(page_views.get(id, 0))
     # END SOLUTION
+    print(res)
     return jsonify(res)
 
 
