@@ -101,7 +101,7 @@ blob_index = bucket.blob(f"{index_src}")
 pickel_in = blob_index.download_as_string()
 NF = pickle.loads(pickel_in)
 
-
+text_prefix = "posting_locations/posting_text/"
 ############################################################################
 
 def get_docs_title_by_id(lst):
@@ -131,32 +131,84 @@ def tokenize(text):
                       token.group() not in all_stopwords]
     return list_of_tokens
 
-def posting_lists_reader(inverted_index, term ,prefix): # work 2
-    """  reads one posting list from disk in byte and convert to int
-        return:
-            [(doc_id:int, tf:int), ...].
+
+
+###################
+def posting_lists_reader(inverted_index, term ,prefix):
+    """ A generator that reads one posting list from disk and yields
+        a (word:str, [(doc_id:int, tf:int), ...]) tuple.
     """
-    print("read")
     with closing(MultiFileReader()) as reader:
         locs = inverted_index.posting_locs[term]
-        locs = [(prefix+v[0],v[1]) for v in locs]
-        b = reader.read(locs, inverted_index.df[term] * TUPLE_SIZE)# convert the bytes read into `b` to a proper posting list.
+        locs = [(prefix + v[0], v[1]) for v in locs]
+        b = reader.read(locs, inverted_index.df[term] * TUPLE_SIZE)
         posting_list = []
+        for i in range(inverted_index.df[term]):
+            doc_id = int.from_bytes(b[i*TUPLE_SIZE:i*TUPLE_SIZE+4], 'big')
+            tf = int.from_bytes(b[i*TUPLE_SIZE+4:(i+1)*TUPLE_SIZE], 'big')
+            posting_list.append((doc_id, tf))
 
-        while b:
-            b_doc_id = int.from_bytes(b[0:4], "big")
-            b_tf_of_w = int.from_bytes(b[4:6], "big")
-            b = b[6:]
-            posting_list.append((b_doc_id, b_tf_of_w))
+    return posting_list
 
-        return posting_list
+
+###############################################################################   BM25
+
+length_docLengths = len(DL) #to run faster one time calculate
+dl_list =  list(DL.items())
+dl_list =list(map(lambda x: int(x[1]),dl_list))
+# print(dl_list)
+sum_dl = 0
+for n in dl_list:
+  sum_dl += n
+
+avg_dl = sum_dl / length_docLengths
+
+class BM25:
+    def __init__(self, inverted_index,k1,k3,b):
+        self.inverted_index = inverted_index
+        self.doc_lengths = DL
+        self.N = length_docLengths
+        self.avgdl = avg_dl
+        self.b = b
+        self.k1 = k1
+        self.k3 = k3
+
+    def get_scores(self, tokens):
+            query_Counter = Counter(tokens)
+            print(query_Counter)
+            scores = {}
+            for term in tokens:
+                if term not in self.inverted_index.df.keys():
+                    continue
+
+                idf = math.log10((self.N+1)/self.inverted_index.df[term])
+                posting = posting_lists_reader(self.inverted_index, term, text_prefix)
+
+                for doc_id, tf in posting:
+                  d = self.doc_lengths[doc_id]
+                  tf_ij = ((self.k1+1)*tf)/((1 - self.b + self.b * d / self.avgdl)*self.k1+tf)
+                  tf_iq = ((self.k3+1)*query_Counter[term])/(self.k3+query_Counter[term])
+                  score =  tf_ij* idf  * tf_iq
+                  if doc_id not in scores:
+                      scores[doc_id] = 0
+                  scores[doc_id] += score
+            return scores
+
+
+def bm25(inverted_index,tokens,k1,k3,b,N):
+  b = b
+  bm = BM25(inverted_index,k1,k3,b)
+  result = bm.get_scores(tokens)
+  return get_top_n(list(result.items()),N),
+
+
 
 def get_top_n(lst, N = 5): #sort the list according to the x[1] and return the top N
     return sorted(lst, key= lambda x:x[1], reverse=True)[:N]
 
+###############################################################################   COS SIM
 
-# text_prefix = "posting_locations/posting_text/"
-text_prefix = "/content/posting_text/"
+# text_prefix = "/content/posting_text/"
 def query_get_top_N_tfidf(inverted_index, query_to_search, N = 5):
     """
 
@@ -170,33 +222,31 @@ def query_get_top_N_tfidf(inverted_index, query_to_search, N = 5):
     result = {}  # result[doc_id] = score
     epsilon = .0000001
     counter = Counter(query_to_search)
-    query_length = len(query_to_search)
-
+    # query_length = len(query_to_search)
     query_vec_2 = 0
     for w in np.unique(query_to_search):
         query_vec_2 += counter[w]**2
-
-
-
     print(query_to_search)
 
     for token in np.unique(query_to_search):
-        print(token)
+        # print(token)
         if token in inverted_index.df.keys():  # avoid terms that do not appear in the index.
             docs = posting_lists_reader(inverted_index, token,text_prefix)  # will return the list of docs, from byte to  [(doc_id:int, tf:int), ...]
-            print("inside if ", token)
+            # print("Token: " ,token,"posting: ",docs)
+            # print(len(docs))
+            # print("inside if ", token)
             for doc_id, doc_tf_w in docs:
                 simCurrent = counter[token]*doc_tf_w
                 result[doc_id] = result.get(doc_id, 0) + simCurrent
-                result[doc_id] = result[doc_id] * (1 / ((query_length * NF[doc_id]) + epsilon))
+                result[doc_id] = result[doc_id] * (1 / ((query_vec_2 * NF[doc_id]) + epsilon))
 
     return get_top_n(list(result.items()),N)
 
 
 
 
-# title_prefix = "posting_locations/posting_title/"
-title_prefix = "/content/posting_title/"
+title_prefix = "posting_locations/posting_title/"
+# title_prefix = "/content/posting_title/"
 def query_get_tfidf_for_all_Title(inverted_index, query_to_search):
     """
     Args:
@@ -217,7 +267,7 @@ def query_get_tfidf_for_all_Title(inverted_index, query_to_search):
     return lst_doc
 
 
-Anchor_prefix = "posting_locations/posting_anchor/"
+anchor_prefix = "posting_locations/posting_anchor/"
 def query_get_tfidf_for_all_Anchor(inverted_index, query_to_search):
     """
     Args:
@@ -230,9 +280,10 @@ def query_get_tfidf_for_all_Anchor(inverted_index, query_to_search):
     result = {}
     for term in query_to_search:
         if inverted_index.df.get(term):
-            ls_doc_freq = posting_lists_reader(inverted_index, term, title_prefix)
+            ls_doc_freq = posting_lists_reader(inverted_index, term, anchor_prefix)
             for doc, freq in ls_doc_freq:
                 result[doc] = result.get(doc, 0) + 1
+
     lst_doc = Counter(result).most_common()
 
     return lst_doc
@@ -337,7 +388,7 @@ def search_title():
     if len(query) == 0:
       return jsonify(res)
     # BEGIN SOLUTION
-    tokens = tokenize(query.lower())
+    tokens = tokenize(query)
     bestDocs = query_get_tfidf_for_all_Title(indexTitle, tokens)
     res = get_docs_title_by_id(bestDocs)
 
@@ -370,7 +421,7 @@ def search_anchor():
       return jsonify(res)
     # # BEGIN SOLUTION
     tokens = tokenize(query.lower())
-    bestDocs = Counter(query_get_tfidf_for_all_Anchor(indexAnchor,tokens)).most_common() #here we don't want to filter the tokens becuase the titles are small not like text
+    bestDocs = query_get_tfidf_for_all_Anchor(indexAnchor,tokens) #here we don't want to filter the tokens becuase the titles are small not like text
     res = get_docs_title_by_id(bestDocs)
     # res = bestDocs
     # END SOLUTION
