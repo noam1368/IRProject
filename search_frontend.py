@@ -95,6 +95,12 @@ blob_index = bucket.blob(f"{index_src}")
 pickel_in = blob_index.download_as_string()
 titles = pickle.loads(pickel_in)
 
+#id_titles
+index_src = "norm.pkl"
+blob_index = bucket.blob(f"{index_src}")
+pickel_in = blob_index.download_as_string()
+NF = pickle.loads(pickel_in)
+
 
 ############################################################################
 
@@ -182,11 +188,7 @@ def query_get_top_N_tfidf(inverted_index, query_to_search, N = 5):
             for doc_id, doc_tf_w in docs:
                 simCurrent = counter[token]*doc_tf_w
                 result[doc_id] = result.get(doc_id, 0) + simCurrent
-                # result[doc_id] = result[doc_id] * (1 / ((query_length * DL[doc_id]) + epsilon))
-    #
-    # for doc_id,v in list(result.items()):
-    #     result[doc_id] = result[doc_id] * (1 / ((query_length * DL[doc_id]) + epsilon))
-
+                result[doc_id] = result[doc_id] * (1 / ((query_length * NF[doc_id]) + epsilon))
 
     return get_top_n(list(result.items()),N)
 

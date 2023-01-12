@@ -19,7 +19,7 @@ gcloud compute addresses create $IP_NAME --project=$PROJECT_NAME --region=$REGIO
 gcloud compute addresses list
 # note the IP address printed above, that's your extrenal IP address.
 # Enter it here: 
-INSTANCE_IP="35.188.120.178"
+INSTANCE_IP="34.134.211.3"
 
 # 2. Create Firewall rule to allow traffic to port 8080 on the instance
 gcloud compute firewall-rules create default-allow-http-8080 \
@@ -65,6 +65,7 @@ gcloud compute ssh $GOOGLE_ACCOUNT_NAME@$INSTANCE_NAME
 
 #resize disk
 gcloud compute disks resize persistent-disk-0 --size 30
+gcloud compute disks describe my-disk --zone=$ZONE
 
 # Copy the files from the bucket to your local machine do it from inside the instance
 gsutil cp -r gs://posting_locations/ .
