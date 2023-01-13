@@ -80,7 +80,7 @@ pickel_in = blob_index.download_as_string()
 titles = pickle.loads(pickel_in)
 
 #id_titles
-index_src = "norm.pkl"
+index_src = "nf.pkl"
 blob_index = bucket.blob(f"{index_src}")
 pickel_in = blob_index.download_as_string()
 NF = pickle.loads(pickel_in)
@@ -218,6 +218,7 @@ def query_get_top_N_tfidf(inverted_index, query_to_search, N=5):
     epsilon = .0000001
     counter = Counter(query_to_search)
     NF_length = len(NF)
+    print("len NF:", NF_length)
     query_length = len(query_to_search)
 
     for token in np.unique(query_to_search):
