@@ -396,7 +396,7 @@ def search():
       return jsonify(res)
     # BEGIN SOLUTION
     print("search")
-    N = 10 #the number of docs i want to do the search on
+    N = 100 #the number of docs i want to do the search on
     tokens = tokenize(query.lower())
     bestDocsBody = bm25(indexText,tokens,0.5,0.5,0.5,N)
     bestDocsTitle = query_get_tfidf_for_all_Title(indexTitle, tokens,N)
