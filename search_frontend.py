@@ -16,6 +16,9 @@ from inverted_index_gcp import MultiFileReader
 import pickle
 # from inverted_index_gcp import InvertedIndex
 # from traitlets.traitlets import Long
+
+from PyDictionary import PyDictionary #this is for our addition for the new method. dictionary that will help us in query expansion.
+dictionary = PyDictionary()
 ###################
 
 #work3
@@ -84,6 +87,8 @@ index_src = "nf.pkl"
 blob_index = bucket.blob(f"{index_src}")
 pickel_in = blob_index.download_as_string()
 NF = pickle.loads(pickel_in)
+
+
 
 #prefix for the local folder inside the instance were the posting locs bin files are found
 text_prefix = "poasting_locs_new/posting_text/"
@@ -369,6 +374,50 @@ class MyFlaskApp(Flask):
 
 app = MyFlaskApp(__name__)
 app.config['JSONIFY_PRETTYPRINT_REGULAR'] = False
+
+@app.route("/search_expansion")
+def search_expansion():
+    '''
+        relate : we will use PyDictionary
+        here we will take the query and will do query expansion on it.
+        Pydictionary have method to return synonyms words for each word.
+        so we will take few words for each of our tokens and find another words that
+        have the same minning. this can help us get the texts that relate to sysnonymes words
+        and upgrade the text that already founded if weren't use.
+
+    Returns:
+    --------
+        list of up to 100 search results, ordered from best to worst where each
+        element is a tuple (wiki_id, title).
+    '''
+    res = []
+    query = request.args.get('query', '')
+    if len(query) == 0:
+      return jsonify(res)
+    # BEGIN SOLUTION
+    print("search_expansion")
+    N = 100 #the number of docs i want to do the search on
+    tokens = tokenize(query.lower())
+    query_after_expansion = []
+
+    for token in tokens:
+        try:
+            synonym = dictionary.synonym(token)
+            query_after_expansion.append(synonym[:3])
+        except:
+            pass
+
+    print("tokens: ", tokens)
+    print("query_after_expansion: ", query_after_expansion)
+    tokens += query_after_expansion
+
+    bestDocs = bm25(indexText,tokens,0.5,0.5,0.5,N)
+    res = get_docs_title_by_id(bestDocs)
+    print(res)
+    # END SOLUTION
+    return jsonify(res)
+
+
 
 
 @app.route("/search")
