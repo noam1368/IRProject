@@ -68,7 +68,7 @@ gcloud compute disks resize persistent-disk-0 --size 30
 gcloud compute disks describe my-disk --zone=$ZONE
 
 # Copy the files from the bucket to your local machine do it from inside the instance
-gsutil cp -r gs://posting_locations/ .
+gsutil cp -r gs://poasting_locs_new/ .
 #installs
 pip install pyspark
 pip install pandas

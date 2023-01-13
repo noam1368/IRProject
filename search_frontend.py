@@ -32,26 +32,10 @@ corpus_stopwords = ["category", "references", "also", "external", "links",
 all_stopwords = english_stopwords.union(corpus_stopwords) #this is containing all the stop words
 RE_WORD = re.compile(r"""[\#\@\w](['\-]?\w){2,24}""", re.UNICODE)
 
-
-#todo change the paths
-#this is the read of the indexes we made before in the storage of the cloud
-dir = "gs://indexes_bucket"
-dlPath = '/dl.pkl'
-# postingsGcpPathNoam="./indexes-my-proj/postings_gcp/"
-id_titlePath="/id_titles/part-00000-93004c08-4631-4e8b-9f56-4def1ff49509-c000.csv.gz"
-
-page_views_path = "/pageviews-202108-user.pkl"
-page_rank_path = "/page-rank/part-00000-88749e01-b371-4d47-8aa9-7fa2ed8b5932-c000.csv.gz"
-
-# indexTitle= InvertedIndex.read_index(dir, "indexTitles")
-# indexText=InvertedIndex.read_index(dir, "indexTexts")
-# indexAnchor=InvertedIndex.read_index(dir, "indexAnchors")
-
 #making local variable
-bucket_name = 'indexes_bucket'
+bucket_name = 'new_index_bucket'
 client = storage.Client()
 bucket = client.bucket(bucket_name)
-
 
 #TEXT
 index_src = "indexTexts.pkl"
@@ -65,14 +49,14 @@ blob_index = bucket.blob(f"{index_src}")
 pickel_in = blob_index.download_as_string()
 indexTitle = pickle.loads(pickel_in)
 
-#Anchor
-index_src = "indexAnchors.pkl"
-blob_index = bucket.blob(f"{index_src}")
-pickel_in = blob_index.download_as_string()
-indexAnchor = pickle.loads(pickel_in)
+# #Anchor todo
+# index_src = "indexAnchors.pkl"
+# blob_index = bucket.blob(f"{index_src}")
+# pickel_in = blob_index.download_as_string()
+# indexAnchor = pickle.loads(pickel_in)
 
 #pageview
-index_src = "page_view_currect/page_view.pkl"
+index_src = "page_view.pkl"
 blob_index = bucket.blob(f"{index_src}")
 pickel_in = blob_index.download_as_string()
 page_views = pickle.loads(pickel_in)
@@ -84,13 +68,13 @@ pickel_in = blob_index.download_as_string()
 DL = pickle.loads(pickel_in)
 
 #page_rank
-index_src = "page_rank_currect/page_rank.pickle"
+index_src = "page_rank.pickle"
 blob_index = bucket.blob(f"{index_src}")
 pickel_in = blob_index.download_as_string()
 page_ranks = pickle.loads(pickel_in)
 
 #id_titles
-index_src = "id_title2/id_titles.pkl"
+index_src = "id_titles.pkl"
 blob_index = bucket.blob(f"{index_src}")
 pickel_in = blob_index.download_as_string()
 titles = pickle.loads(pickel_in)
@@ -101,7 +85,22 @@ blob_index = bucket.blob(f"{index_src}")
 pickel_in = blob_index.download_as_string()
 NF = pickle.loads(pickel_in)
 
-text_prefix = "posting_locations/posting_text/"
+#prefix for the local folder inside the instance were the posting locs bin files are found
+text_prefix = "poasting_locs_new/posting_text/"
+# text_prefix = "/content/posting_text/" #from colab
+title_prefix = "poasting_locs_new/posting_title/"
+# title_prefix = "/content/posting_title/"
+anchor_prefix = "poasting_locs_new/posting_anchor/"
+
+#BM25 parameter that calculate one time for improve the run time
+length_docLengths = len(DL) #to run faster one time calculate
+dl_list =  list(DL.items())
+dl_list =list(map(lambda x: int(x[1]),dl_list))
+sum_dl = 0
+for n in dl_list:
+  sum_dl += n
+
+avg_dl = sum_dl / length_docLengths
 ############################################################################
 
 def get_docs_title_by_id(lst):
@@ -133,7 +132,14 @@ def tokenize(text):
 
 
 
-###################
+
+###############################################################################   get top N after Sort
+def get_top_n(lst, N = 5): #sort the list according to the x[1] and return the top N
+    return sorted(lst, key= lambda x:x[1], reverse=True)[:N]
+###############################################################################   END
+
+
+###############################################################################   reader for the posting list
 def posting_lists_reader(inverted_index, term ,prefix):
     """ A generator that reads one posting list from disk and yields
         a (word:str, [(doc_id:int, tf:int), ...]) tuple.
@@ -150,18 +156,10 @@ def posting_lists_reader(inverted_index, term ,prefix):
 
     return posting_list
 
-
+###############################################################################   END
 ###############################################################################   BM25
 
-length_docLengths = len(DL) #to run faster one time calculate
-dl_list =  list(DL.items())
-dl_list =list(map(lambda x: int(x[1]),dl_list))
-# print(dl_list)
-sum_dl = 0
-for n in dl_list:
-  sum_dl += n
 
-avg_dl = sum_dl / length_docLengths
 
 class BM25:
     def __init__(self, inverted_index,k1,k3,b):
@@ -196,20 +194,15 @@ class BM25:
 
 
 def bm25(inverted_index,tokens,k1,k3,b,N):
-  b = b
-  bm = BM25(inverted_index,k1,k3,b)
-  result = bm.get_scores(tokens)
-  return get_top_n(list(result.items()),N),
+    b = b
+    bm = BM25(inverted_index,k1,k3,b)
+    result = bm.get_scores(tokens)
+    return get_top_n(list(result.items()),N)
 
+###############################################################################   END
+###############################################################################   COS SIM Body
 
-
-def get_top_n(lst, N = 5): #sort the list according to the x[1] and return the top N
-    return sorted(lst, key= lambda x:x[1], reverse=True)[:N]
-
-###############################################################################   COS SIM
-
-# text_prefix = "/content/posting_text/"
-def query_get_top_N_tfidf(inverted_index, query_to_search, N = 5):
+def query_get_top_N_tfidf(inverted_index, query_to_search, N=5):
     """
 
     Args:
@@ -219,35 +212,70 @@ def query_get_top_N_tfidf(inverted_index, query_to_search, N = 5):
     Returns:
 
     """
+
+    # for embedding in query_to_search:
+    #   print(embedding)
+
     result = {}  # result[doc_id] = score
     epsilon = .0000001
     counter = Counter(query_to_search)
-    # query_length = len(query_to_search)
-    query_vec_2 = 0
-    for w in np.unique(query_to_search):
-        query_vec_2 += counter[w]**2
-    print(query_to_search)
+    NF_length = len(NF)
+    query_length = len(query_to_search)
 
     for token in np.unique(query_to_search):
-        # print(token)
         if token in inverted_index.df.keys():  # avoid terms that do not appear in the index.
-            docs = posting_lists_reader(inverted_index, token,text_prefix)  # will return the list of docs, from byte to  [(doc_id:int, tf:int), ...]
-            # print("Token: " ,token,"posting: ",docs)
-            # print(len(docs))
-            # print("inside if ", token)
-            for doc_id, doc_tf_w in docs:
-                simCurrent = counter[token]*doc_tf_w
-                result[doc_id] = result.get(doc_id, 0) + simCurrent
-                result[doc_id] = result[doc_id] * (1 / ((query_vec_2 * NF[doc_id]) + epsilon))
+            tf = counter[token] / query_length  # term frequency divded by the length of the query
+            df = inverted_index.df[token]
+            idf = math.log10((NF_length) / (df + epsilon))
+            docs = posting_lists_reader(inverted_index,token,text_prefix)  # will return the list of docs, from byte to  [(doc_id:int, tf:int), ...]
+            tfidfQ = tf * idf
+            for doc_id, doc_tf in docs:
+                tfidfD = (doc_tf / NF[doc_id]) * math.log10(NF_length / inverted_index.df[token])
+                tfidf_mul = tfidfD * tfidfQ
+                result[doc_id] = result.get(doc_id, 0) + tfidf_mul
 
-    return get_top_n(list(result.items()),N)
+    return get_top_n(result.items(), N)
 
 
 
+# def query_get_top_N_tfidf(inverted_index, query_to_search, N = 5): #todo delete another try for the func
+#     """
+#
+#     Args:
+#         query_to_search:
+#         index:
+#
+#     Returns:
+#
+#     """
+#     result = {}  # result[doc_id] = score
+#     epsilon = .0000001
+#     counter = Counter(query_to_search)
+#     # query_length = len(query_to_search)
+#     query_vec_2 = 0
+#     for w in np.unique(query_to_search):
+#         query_vec_2 += counter[w]**2
+#     print(query_to_search)
+#
+#     for token in np.unique(query_to_search):
+#         # print(token)
+#         if token in inverted_index.df.keys():  # avoid terms that do not appear in the index.
+#             docs = posting_lists_reader(inverted_index, token,text_prefix)  # will return the list of docs, from byte to  [(doc_id:int, tf:int), ...]
+#             # print("Token: " ,token,"posting: ",docs)
+#             # print(len(docs))
+#             # print("inside if ", token)
+#             for doc_id, doc_tf_w in docs:
+#                 simCurrent = counter[token]*doc_tf_w
+#                 result[doc_id] = result.get(doc_id, 0) + simCurrent
+#                 result[doc_id] = result[doc_id] * (1 / ((query_vec_2 * NF[doc_id]) + epsilon))
+#
+#     return get_top_n(list(result.items()),N)
 
-title_prefix = "posting_locations/posting_title/"
-# title_prefix = "/content/posting_title/"
-def query_get_tfidf_for_all_Title(inverted_index, query_to_search):
+###############################################################################   END
+
+
+
+def query_get_tfidf_for_all_Title(inverted_index, query_to_search,N=0):
     """
     Args:
         query_to_search:
@@ -264,10 +292,13 @@ def query_get_tfidf_for_all_Title(inverted_index, query_to_search):
                 result[doc] = result.get(doc, 0) + 1
     lst_doc = Counter(result).most_common()
 
+    if N > 0: #this is for the search method. we don't need all the titles
+        return lst_doc[:N]
+
     return lst_doc
 
 
-anchor_prefix = "posting_locations/posting_anchor/"
+
 def query_get_tfidf_for_all_Anchor(inverted_index, query_to_search):
     """
     Args:
@@ -287,6 +318,47 @@ def query_get_tfidf_for_all_Anchor(inverted_index, query_to_search):
     lst_doc = Counter(result).most_common()
 
     return lst_doc
+
+
+def search_merge_results(title_scores, body_scores, title_weight=0.5, text_weight=0.5, N=100):
+    """
+    This function merge and sort documents retrieved by its weighte score (e.g., title and body).
+
+    Parameters:
+    -----------
+    title_scores: a list of tuples build upon the title index of queries and tuples representing scores as follows:
+                                                                            key: query_id
+                                                                            value: score
+
+    body_scores: a list of tuples build upon the body/text index of queries and tuples representing scores as follows:
+                                                                            key: query_id
+                                                                            value: score
+    title_weight: float, for weigted average utilizing title and body scores
+    text_weight: float, for weigted average utilizing title and body scores
+    N: Integer. How many document to retrieve. This argument is passed to topN function. By default N = 100, for the topN function.
+
+    Returns:
+    -----------
+    lst of querires and topN pairs as follows:
+                                            key: query_id
+                                            value: list of pairs in the following format:(doc_id,score).
+    """
+    result = {}
+
+    for k, v in title_scores:
+        if k not in result:
+            result[k] = 0
+
+        result[k] = result[k] + (title_weight * v)
+
+    for k, v in body_scores:
+        if k not in result:
+            result[k] = 0
+
+        result[k] = result[k] + (text_weight * v)
+
+    return sorted(result.items(), key=lambda x: x[1], reverse=True)[:N]
+
 
 
 
@@ -323,12 +395,12 @@ def search():
     if len(query) == 0:
       return jsonify(res)
     # BEGIN SOLUTION
+    print("search")
+    N = 10 #the number of docs i want to do the search on
     tokens = tokenize(query.lower())
-    #we are doing the assumption that the search on the text is inuf to tell what is the best 100
-    ##todo maybe think about weight to the title and text like ass 4
-    tokens_after_filter = [term for term in tokens if indexText.df[term] < 400000 and term in indexText.df] #todo change the number according to number we see warking good
-    bestDocs = query_get_top_N_tfidf(indexText,tokens_after_filter,10)
-    # res = bestDocs
+    bestDocsBody = bm25(indexText,tokens,0.5,0.5,0.5,N)
+    bestDocsTitle = query_get_tfidf_for_all_Title(indexTitle, tokens,N)
+    bestDocs = search_merge_results(bestDocsTitle,bestDocsBody,0.5,0.5,N)
     res = get_docs_title_by_id(bestDocs)
     print(res)
     # END SOLUTION
@@ -420,9 +492,9 @@ def search_anchor():
     if len(query) == 0:
       return jsonify(res)
     # # BEGIN SOLUTION
-    tokens = tokenize(query.lower())
-    bestDocs = query_get_tfidf_for_all_Anchor(indexAnchor,tokens) #here we don't want to filter the tokens becuase the titles are small not like text
-    res = get_docs_title_by_id(bestDocs)
+    # tokens = tokenize(query.lower())
+    # bestDocs = query_get_tfidf_for_all_Anchor(indexAnchor,tokens) #here we don't want to filter the tokens becuase the titles are small not like text
+    # res = get_docs_title_by_id(bestDocs)
     # res = bestDocs
     # END SOLUTION
     print(res)
