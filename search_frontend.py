@@ -137,8 +137,6 @@ def tokenize(text):
 def get_top_n(lst, N = 5): #sort the list according to the x[1] and return the top N
     return sorted(lst, key= lambda x:x[1], reverse=True)[:N]
 ###############################################################################   END
-
-
 ###############################################################################   reader for the posting list
 def posting_lists_reader(inverted_index, term ,prefix):
     """ A generator that reads one posting list from disk and yields
@@ -275,7 +273,7 @@ def query_get_top_N_tfidf(inverted_index, query_to_search, N=5):
 
 
 
-def query_get_tfidf_for_all_Title(inverted_index, query_to_search,N=0):
+def query_get_for_all_binary_Title(inverted_index, query_to_search,N=0):
     """
     Args:
         query_to_search:
@@ -399,7 +397,7 @@ def search():
     N = 100 #the number of docs i want to do the search on
     tokens = tokenize(query.lower())
     bestDocsBody = bm25(indexText,tokens,0.5,0.5,0.5,N)
-    bestDocsTitle = query_get_tfidf_for_all_Title(indexTitle, tokens,N)
+    bestDocsTitle = query_get_for_all_binary_Title(indexTitle, tokens,N)
     bestDocs = search_merge_results(bestDocsTitle,bestDocsBody,0.5,0.5,N)
     res = get_docs_title_by_id(bestDocs)
     print(res)
@@ -428,8 +426,6 @@ def search_body():
       return jsonify(res)
     # BEGIN SOLUTION
     tokens = tokenize(query.lower())
-    print("serchhhhhhhh")
-    # tokens_after_filter = [term for term in tokens if indexText.df[term] < 300000 and term in indexText.df]
     bestDocs = query_get_top_N_tfidf(indexText,tokens,10)
     res = get_docs_title_by_id(bestDocs)
     # res = bestDocs
@@ -454,14 +450,12 @@ def search_title():
         list of ALL (not just top 100) search results, ordered from best to 
         worst where each element is a tuple (wiki_id, title).
     '''
-    print("1111111111111")
     res = []
     query = request.args.get('query', '')
     if len(query) == 0:
       return jsonify(res)
-    # BEGIN SOLUTION
     tokens = tokenize(query)
-    bestDocs = query_get_tfidf_for_all_Title(indexTitle, tokens)
+    bestDocs = query_get_for_all_binary_Title(indexTitle, tokens)
     res = get_docs_title_by_id(bestDocs)
 
     # res = bestDocs
