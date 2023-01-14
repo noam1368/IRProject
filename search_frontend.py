@@ -10,15 +10,12 @@ from pathlib import Path
 from google.cloud import storage
 import math
 from contextlib import closing
-from inverted_index_gcp import *
-from inverted_index_gcp import MultiFileReader
 # import inverted_index_gcp
 import pickle
-# from inverted_index_gcp import InvertedIndex
+# from inverted_index_gcp_anchor import *
+from inverted_index_gcp import *
+from inverted_index_gcp import MultiFileReader
 # from traitlets.traitlets import Long
-
-from PyDictionary import PyDictionary #this is for our addition for the new method. dictionary that will help us in query expansion.
-dictionary = PyDictionary()
 ###################
 
 #work3
@@ -52,12 +49,6 @@ blob_index = bucket.blob(f"{index_src}")
 pickel_in = blob_index.download_as_string()
 indexTitle = pickle.loads(pickel_in)
 
-# #Anchor todo
-# index_src = "indexAnchors.pkl"
-# blob_index = bucket.blob(f"{index_src}")
-# pickel_in = blob_index.download_as_string()
-# indexAnchor = pickle.loads(pickel_in)
-
 #pageview
 index_src = "page_view.pkl"
 blob_index = bucket.blob(f"{index_src}")
@@ -88,7 +79,11 @@ blob_index = bucket.blob(f"{index_src}")
 pickel_in = blob_index.download_as_string()
 NF = pickle.loads(pickel_in)
 
-
+#Anchor
+index_src = "indexAnchors.pkl"
+blob_index = bucket.blob(f"{index_src}")
+pickel_in = blob_index.download_as_string()
+indexAnchor = pickle.loads(pickel_in)
 
 #prefix for the local folder inside the instance were the posting locs bin files are found
 text_prefix = "poasting_locs_new/posting_text/"
@@ -215,10 +210,6 @@ def query_get_top_N_tfidf(inverted_index, query_to_search, N=5):
     Returns:
 
     """
-
-    # for embedding in query_to_search:
-    #   print(embedding)
-
     result = {}  # result[doc_id] = score
     epsilon = .0000001
     counter = Counter(query_to_search)
@@ -239,42 +230,6 @@ def query_get_top_N_tfidf(inverted_index, query_to_search, N=5):
                 result[doc_id] = result.get(doc_id, 0) + tfidf_mul
 
     return get_top_n(result.items(), N)
-
-
-
-# def query_get_top_N_tfidf(inverted_index, query_to_search, N = 5): #todo delete another try for the func
-#     """
-#
-#     Args:
-#         query_to_search:
-#         index:
-#
-#     Returns:
-#
-#     """
-#     result = {}  # result[doc_id] = score
-#     epsilon = .0000001
-#     counter = Counter(query_to_search)
-#     # query_length = len(query_to_search)
-#     query_vec_2 = 0
-#     for w in np.unique(query_to_search):
-#         query_vec_2 += counter[w]**2
-#     print(query_to_search)
-#
-#     for token in np.unique(query_to_search):
-#         # print(token)
-#         if token in inverted_index.df.keys():  # avoid terms that do not appear in the index.
-#             docs = posting_lists_reader(inverted_index, token,text_prefix)  # will return the list of docs, from byte to  [(doc_id:int, tf:int), ...]
-#             # print("Token: " ,token,"posting: ",docs)
-#             # print(len(docs))
-#             # print("inside if ", token)
-#             for doc_id, doc_tf_w in docs:
-#                 simCurrent = counter[token]*doc_tf_w
-#                 result[doc_id] = result.get(doc_id, 0) + simCurrent
-#                 result[doc_id] = result[doc_id] * (1 / ((query_vec_2 * NF[doc_id]) + epsilon))
-#
-#     return get_top_n(list(result.items()),N)
-
 ###############################################################################   END
 
 
@@ -303,7 +258,7 @@ def query_get_for_all_binary_Title(inverted_index, query_to_search,N=0):
 
 
 
-def query_get_tfidf_for_all_Anchor(inverted_index, query_to_search):
+def query_get_tfidf_for_all_Anchor(inverted_index, query_to_search,N=0):
     """
     Args:
         query_to_search:
@@ -315,11 +270,15 @@ def query_get_tfidf_for_all_Anchor(inverted_index, query_to_search):
     result = {}
     for term in query_to_search:
         if inverted_index.df.get(term):
+            print(term)
             ls_doc_freq = posting_lists_reader(inverted_index, term, anchor_prefix)
             for doc, freq in ls_doc_freq:
                 result[doc] = result.get(doc, 0) + 1
 
     lst_doc = Counter(result).most_common()
+
+    if N > 0: #this is for the search method. we don't need all the anchors
+        return lst_doc[:N]
 
     return lst_doc
 
@@ -365,7 +324,6 @@ def search_merge_results(title_scores, body_scores, title_weight=0.5, text_weigh
 
 
 
-
 from flask import Flask, request, jsonify
 
 class MyFlaskApp(Flask):
@@ -374,50 +332,6 @@ class MyFlaskApp(Flask):
 
 app = MyFlaskApp(__name__)
 app.config['JSONIFY_PRETTYPRINT_REGULAR'] = False
-
-@app.route("/search_expansion")
-def search_expansion():
-    '''
-        relate : we will use PyDictionary
-        here we will take the query and will do query expansion on it.
-        Pydictionary have method to return synonyms words for each word.
-        so we will take few words for each of our tokens and find another words that
-        have the same minning. this can help us get the texts that relate to sysnonymes words
-        and upgrade the text that already founded if weren't use.
-
-    Returns:
-    --------
-        list of up to 100 search results, ordered from best to worst where each
-        element is a tuple (wiki_id, title).
-    '''
-    res = []
-    query = request.args.get('query', '')
-    if len(query) == 0:
-      return jsonify(res)
-    # BEGIN SOLUTION
-    print("search_expansion")
-    N = 100 #the number of docs i want to do the search on
-    tokens = tokenize(query.lower())
-    query_after_expansion = []
-
-    for token in tokens:
-        try:
-            synonym = dictionary.synonym(token)
-            query_after_expansion.append(synonym[:3])
-        except:
-            pass
-
-    print("tokens: ", tokens)
-    print("query_after_expansion: ", query_after_expansion)
-    tokens += query_after_expansion
-
-    bestDocs = bm25(indexText,tokens,0.5,0.5,0.5,N)
-    res = get_docs_title_by_id(bestDocs)
-    print(res)
-    # END SOLUTION
-    return jsonify(res)
-
-
 
 
 @app.route("/search")
@@ -447,6 +361,7 @@ def search():
     N = 100 #the number of docs i want to do the search on
     tokens = tokenize(query.lower())
     bestDocsBody = bm25(indexText,tokens,0.5,0.5,0.5,N)
+    # bestDocsBody = query_get_top_N_tfidf(indexText, tokens, N)
     bestDocsTitle = query_get_for_all_binary_Title(indexTitle, tokens,N)
     bestDocs = search_merge_results(bestDocsTitle,bestDocsBody,0.5,0.5,N)
     res = get_docs_title_by_id(bestDocs)
@@ -476,7 +391,7 @@ def search_body():
       return jsonify(res)
     # BEGIN SOLUTION
     tokens = tokenize(query.lower())
-    bestDocs = query_get_top_N_tfidf(indexText,tokens,10)
+    bestDocs = query_get_top_N_tfidf(indexText,tokens,100)
     res = get_docs_title_by_id(bestDocs)
     # res = bestDocs
     # END SOLUTION
@@ -536,10 +451,9 @@ def search_anchor():
     if len(query) == 0:
       return jsonify(res)
     # # BEGIN SOLUTION
-    # tokens = tokenize(query.lower())
-    # bestDocs = query_get_tfidf_for_all_Anchor(indexAnchor,tokens) #here we don't want to filter the tokens becuase the titles are small not like text
-    # res = get_docs_title_by_id(bestDocs)
-    # res = bestDocs
+    tokens = tokenize(query.lower())
+    bestDocs = query_get_tfidf_for_all_Anchor(indexAnchor,tokens,100) #here we don't want to filter the tokens becuase the titles are small not like text
+    res = get_docs_title_by_id(bestDocs)
     # END SOLUTION
     print(res)
     return jsonify(res)
@@ -601,6 +515,147 @@ def get_pageview():
     print(res)
     return jsonify(res)
 
+
+
+
+########################################################################################   Expirement methods
+# def query_get_for_all_freq_text(inverted_index, query_to_search,N=0):
+#     """
+#     Args:
+#         query_to_search:
+#         index:
+#
+#     Returns:
+#
+#     """
+#     result = {}
+#     for term in query_to_search:
+#         if inverted_index.df.get(term):
+#             ls_doc_freq = posting_lists_reader(inverted_index, term, text_prefix)
+#             for doc, freq in ls_doc_freq:
+#                 result[doc] = result.get(doc, 0) + freq
+#     lst_doc = Counter(result).most_common()
+#
+#     if N > 0: #this is for the search method. we don't need all the titles
+#         return lst_doc[:N]
+#
+#     return lst_doc
+#
+#
+#
+# @app.route("/search_freq")
+# def search_freq():
+#     '''
+#         relate : here we will take the regular binary search and improve it by
+#         taking the freq of each term in each doc.
+#         will give more accurate when using with text.
+#
+#     Returns:
+#     --------
+#         list of up to 100 search results, ordered from best to worst where each
+#         element is a tuple (wiki_id, title).
+#     '''
+#     res = []
+#     query = request.args.get('query', '')
+#     if len(query) == 0:
+#       return jsonify(res)
+#     # BEGIN SOLUTION
+#     print("search_expansion")
+#     N = 100 #the number of docs i want to do the search on
+#     tokens = tokenize(query.lower())
+#     bestDocs = query_get_for_all_freq_text(indexText,tokens,100)
+#     res = get_docs_title_by_id(bestDocs)
+#     print(res)
+#     # END SOLUTION
+#     return jsonify(res)
+
+
+
+
+
+
+#
+# def search_merge_results_with_page_rank(title_scores, body_scores, title_weight=0.3, text_weight=0.3, page_rank_weight = 0.4, N=100):
+#     """
+#     This function merge and sort documents retrieved by its weighte score (e.g., title and body).
+#
+#     Parameters:
+#     -----------
+#     title_scores: a list of tuples build upon the title index of queries and tuples representing scores as follows:
+#                                                                             key: query_id
+#                                                                             value: score
+#
+#     body_scores: a list of tuples build upon the body/text index of queries and tuples representing scores as follows:
+#                                                                             key: query_id
+#                                                                             value: score
+#     title_weight: float, for weigted average utilizing title and body scores
+#     text_weight: float, for weigted average utilizing title and body scores
+#     N: Integer. How many document to retrieve. This argument is passed to topN function. By default N = 100, for the topN function.
+#
+#     Returns:
+#     -----------
+#     lst of querires and topN pairs as follows:
+#                                             key: query_id
+#                                             value: list of pairs in the following format:(doc_id,score).
+#     """
+#     page_rank_used = set()
+#     result = {}
+#
+#     for k, v in title_scores:
+#         if k not in result:
+#             result[k] = 0
+#
+#         result[k] = result[k] + (title_weight * v)
+#
+#         if k not in page_rank_used:
+#             result[k] += (page_ranks[k] * page_rank_weight)
+#
+#     for k, v in body_scores:
+#         if k not in result:
+#             result[k] = 0
+#
+#         result[k] = result[k] + (text_weight * v)
+#
+#         if k not in page_rank_used:
+#             result[k] += (page_ranks[k] * page_rank_weight)
+#
+#     return sorted(result.items(), key=lambda x: x[1], reverse=True)[:N]
+
+
+#
+# @app.route("/search_with_page_rank")
+# def search_with_page_rank():
+#     ''' Returns up to a 100 of your best search results for the query. This is
+#         the place to put forward your best search engine, and you are free to
+#         implement the retrieval whoever you'd like within the bound of the
+#         project requirements (efficiency, quality, etc.). That means it is up to
+#         you to decide on whether to use stemming, remove stopwords, use
+#         PageRank, query expansion, etc.
+#
+#         To issue a query navigate to a URL like:
+#          http://YOUR_SERVER_DOMAIN/search?query=hello+world
+#         where YOUR_SERVER_DOMAIN is something like XXXX-XX-XX-XX-XX.ngrok.io
+#         if you're using ngrok on Colab or your external IP on GCP.
+#     Returns:
+#     --------
+#         list of up to 100 search results, ordered from best to worst where each
+#         element is a tuple (wiki_id, title).
+#     '''
+#     res = []
+#     query = request.args.get('query', '')
+#     if len(query) == 0:
+#       return jsonify(res)
+#     # BEGIN SOLUTION
+#     print("search")
+#     N = 100 #the number of docs i want to do the search on
+#     tokens = tokenize(query.lower())
+#     bestDocsBody = bm25(indexText,tokens,0.5,0.5,0.5,N)
+#     bestDocsTitle = query_get_for_all_binary_Title(indexTitle, tokens,N)
+#     bestDocs = search_merge_results_with_page_rank(bestDocsTitle,bestDocsBody,0.3,0.3,0.4,100)
+#     res = get_docs_title_by_id(bestDocs)
+#     print(res)
+#     # END SOLUTION
+#     return jsonify(res)
 
 if __name__ == '__main__':
     # run the Flask RESTful API, make the server publicly available (host='0.0.0.0') on port 8080
