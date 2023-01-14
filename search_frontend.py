@@ -1,26 +1,87 @@
-import gzip
-from collections import Counter, OrderedDict
-import pandas as pd
-import re
+from collections import Counter
 import numpy as np
 import nltk
 from nltk.stem.porter import *
 from nltk.corpus import stopwords
-from pathlib import Path
 from google.cloud import storage
 import math
 from contextlib import closing
-# import inverted_index_gcp
 import pickle
-# from inverted_index_gcp_anchor import *
 from inverted_index_gcp import *
 from inverted_index_gcp import MultiFileReader
-# from traitlets.traitlets import Long
-###################
 
-#work3
-TUPLE_SIZE = 6       # We're going to pack the doc_id and tf values in this many bytes.
-TF_MASK = 2 ** 16 - 1 # Masking the 16 low bits of an integer
+###################
+# making local variable
+bucket_name = 'new_index_bucket'
+client = storage.Client()
+bucket = client.bucket(bucket_name)
+
+# TEXT
+index_src = "indexTexts.pkl"
+blob_index = bucket.blob(f"{index_src}")
+pickel_in = blob_index.download_as_string()
+indexText = pickle.loads(pickel_in)
+
+# Title
+index_src = "indexTitles.pkl"
+blob_index = bucket.blob(f"{index_src}")
+pickel_in = blob_index.download_as_string()
+indexTitle = pickle.loads(pickel_in)
+
+# pageview
+index_src = "page_view.pkl"
+blob_index = bucket.blob(f"{index_src}")
+pickel_in = blob_index.download_as_string()
+page_views = pickle.loads(pickel_in)
+
+# DL
+index_src = "dl.pkl"
+blob_index = bucket.blob(f"{index_src}")
+pickel_in = blob_index.download_as_string()
+DL = pickle.loads(pickel_in)
+
+# page_rank
+index_src = "page_rank.pickle"
+blob_index = bucket.blob(f"{index_src}")
+pickel_in = blob_index.download_as_string()
+page_ranks = pickle.loads(pickel_in)
+
+# id_titles
+index_src = "id_titles.pkl"
+blob_index = bucket.blob(f"{index_src}")
+pickel_in = blob_index.download_as_string()
+titles = pickle.loads(pickel_in)
+
+# id_titles
+index_src = "nf.pkl"
+blob_index = bucket.blob(f"{index_src}")
+pickel_in = blob_index.download_as_string()
+NF = pickle.loads(pickel_in)
+
+# Anchor
+index_src = "indexAnchors.pkl"
+blob_index = bucket.blob(f"{index_src}")
+pickel_in = blob_index.download_as_string()
+indexAnchor = pickle.loads(pickel_in)
+
+# prefix for the local folder inside the instance were the posting locs bin files are found
+text_prefix = "poasting_locs_new/posting_text/"
+title_prefix = "poasting_locs_new/posting_title/"
+anchor_prefix = "poasting_locs_new/posting_anchor/"
+
+# BM25 parameter that calculate one time for improve the run time
+length_docLengths = len(DL)  # to run faster one time calculate
+dl_list = list(DL.items())
+dl_list = list(map(lambda x: int(x[1]), dl_list))
+sum_dl = 0
+for n in dl_list:
+    sum_dl += n
+
+avg_dl = sum_dl / length_docLengths
+
+###############################################################################   all the things for tokenize
+TUPLE_SIZE = 6  # We're going to pack the doc_id and tf values in this many bytes.
+TF_MASK = 2 ** 16 - 1  # Masking the 16 low bits of an integer
 
 nltk.download('stopwords')
 english_stopwords = frozenset(stopwords.words('english'))
@@ -29,90 +90,22 @@ corpus_stopwords = ["category", "references", "also", "external", "links",
                     "part", "thumb", "including", "second", "following",
                     "many", "however", "would", "became"]
 
-all_stopwords = english_stopwords.union(corpus_stopwords) #this is containing all the stop words
+all_stopwords = english_stopwords.union(corpus_stopwords)  # this is containing all the stop words
 RE_WORD = re.compile(r"""[\#\@\w](['\-]?\w){2,24}""", re.UNICODE)
 
-#making local variable
-bucket_name = 'new_index_bucket'
-client = storage.Client()
-bucket = client.bucket(bucket_name)
 
-#TEXT
-index_src = "indexTexts.pkl"
-blob_index = bucket.blob(f"{index_src}")
-pickel_in = blob_index.download_as_string()
-indexText = pickle.loads(pickel_in)
-
-#Title
-index_src = "indexTitles.pkl"
-blob_index = bucket.blob(f"{index_src}")
-pickel_in = blob_index.download_as_string()
-indexTitle = pickle.loads(pickel_in)
-
-#pageview
-index_src = "page_view.pkl"
-blob_index = bucket.blob(f"{index_src}")
-pickel_in = blob_index.download_as_string()
-page_views = pickle.loads(pickel_in)
-
-#DL
-index_src = "dl.pkl"
-blob_index = bucket.blob(f"{index_src}")
-pickel_in = blob_index.download_as_string()
-DL = pickle.loads(pickel_in)
-
-#page_rank
-index_src = "page_rank.pickle"
-blob_index = bucket.blob(f"{index_src}")
-pickel_in = blob_index.download_as_string()
-page_ranks = pickle.loads(pickel_in)
-
-#id_titles
-index_src = "id_titles.pkl"
-blob_index = bucket.blob(f"{index_src}")
-pickel_in = blob_index.download_as_string()
-titles = pickle.loads(pickel_in)
-
-#id_titles
-index_src = "nf.pkl"
-blob_index = bucket.blob(f"{index_src}")
-pickel_in = blob_index.download_as_string()
-NF = pickle.loads(pickel_in)
-
-#Anchor
-index_src = "indexAnchors.pkl"
-blob_index = bucket.blob(f"{index_src}")
-pickel_in = blob_index.download_as_string()
-indexAnchor = pickle.loads(pickel_in)
-
-#prefix for the local folder inside the instance were the posting locs bin files are found
-text_prefix = "poasting_locs_new/posting_text/"
-# text_prefix = "/content/posting_text/" #from colab
-title_prefix = "poasting_locs_new/posting_title/"
-# title_prefix = "/content/posting_title/"
-anchor_prefix = "poasting_locs_new/posting_anchor/"
-
-#BM25 parameter that calculate one time for improve the run time
-length_docLengths = len(DL) #to run faster one time calculate
-dl_list =  list(DL.items())
-dl_list =list(map(lambda x: int(x[1]),dl_list))
-sum_dl = 0
-for n in dl_list:
-  sum_dl += n
-
-avg_dl = sum_dl / length_docLengths
-############################################################################
+############################################################################ id title dictionary to get the titles
 
 def get_docs_title_by_id(lst):
     all_titles = []
-    for id,no in lst:
+    for id, no in lst:
         if id in titles:
-            all_titles.append((id,titles[id]))
-            # print((id,titles[id]))
+            all_titles.append((id, titles[id]))
 
     return all_titles
 
 
+############################################################################### Tokenize
 
 def tokenize(text):
     """
@@ -131,14 +124,18 @@ def tokenize(text):
     return list_of_tokens
 
 
+###############################################################################
 
 
 ###############################################################################   get top N after Sort
-def get_top_n(lst, N = 5): #sort the list according to the x[1] and return the top N
-    return sorted(lst, key= lambda x:x[1], reverse=True)[:N]
+def get_top_n(lst, N=5):  # sort the list according to the x[1] and return the top N
+    return sorted(lst, key=lambda x: x[1], reverse=True)[:N]
+
+
 ###############################################################################   END
+
 ###############################################################################   reader for the posting list
-def posting_lists_reader(inverted_index, term ,prefix):
+def posting_lists_reader(inverted_index, term, prefix):
     """ A generator that reads one posting list from disk and yields
         a (word:str, [(doc_id:int, tf:int), ...]) tuple.
     """
@@ -148,19 +145,23 @@ def posting_lists_reader(inverted_index, term ,prefix):
         b = reader.read(locs, inverted_index.df[term] * TUPLE_SIZE)
         posting_list = []
         for i in range(inverted_index.df[term]):
-            doc_id = int.from_bytes(b[i*TUPLE_SIZE:i*TUPLE_SIZE+4], 'big')
-            tf = int.from_bytes(b[i*TUPLE_SIZE+4:(i+1)*TUPLE_SIZE], 'big')
+            doc_id = int.from_bytes(b[i * TUPLE_SIZE:i * TUPLE_SIZE + 4], 'big')
+            tf = int.from_bytes(b[i * TUPLE_SIZE + 4:(i + 1) * TUPLE_SIZE], 'big')
             posting_list.append((doc_id, tf))
 
     return posting_list
+
 
 ###############################################################################   END
 ###############################################################################   BM25
 
 
-
 class BM25:
-    def __init__(self, inverted_index,k1,k3,b):
+    """
+    class that represent all what the BM25 need for calculation
+    """
+
+    def __init__(self, inverted_index, k1, k3, b):
         self.inverted_index = inverted_index
         self.doc_lengths = DL
         self.N = length_docLengths
@@ -170,77 +171,102 @@ class BM25:
         self.k3 = k3
 
     def get_scores(self, tokens):
-            query_Counter = Counter(tokens)
-            print(query_Counter)
-            scores = {}
-            for term in tokens:
-                if term not in self.inverted_index.df.keys():
-                    continue
+        """
+        Args:
+            tokens: query after tokenize
 
-                idf = math.log10((self.N+1)/self.inverted_index.df[term])
-                posting = posting_lists_reader(self.inverted_index, term, text_prefix)
+        Returns:
+            dictionary of scores according to bm25 according to the weight the constructor got as feilds k1,k3,b
 
-                for doc_id, tf in posting:
-                  d = self.doc_lengths[doc_id]
-                  tf_ij = ((self.k1+1)*tf)/((1 - self.b + self.b * d / self.avgdl)*self.k1+tf)
-                  tf_iq = ((self.k3+1)*query_Counter[term])/(self.k3+query_Counter[term])
-                  score =  tf_ij* idf  * tf_iq
-                  if doc_id not in scores:
-                      scores[doc_id] = 0
-                  scores[doc_id] += score
-            return scores
+        """
+        query_Counter = Counter(tokens)
+        print(query_Counter)
+        scores = {}
+        for term in tokens:
+            if term not in self.inverted_index.df.keys():
+                continue
+
+            idf = math.log10((self.N + 1) / self.inverted_index.df[term])
+            posting = posting_lists_reader(self.inverted_index, term, text_prefix)
+
+            for doc_id, tf in posting:
+                d = self.doc_lengths[doc_id]
+                tf_ij = ((self.k1 + 1) * tf) / ((1 - self.b + self.b * d / self.avgdl) * self.k1 + tf)
+                tf_iq = ((self.k3 + 1) * query_Counter[term]) / (self.k3 + query_Counter[term])
+                score = tf_ij * idf * tf_iq
+                if doc_id not in scores:
+                    scores[doc_id] = 0
+                scores[doc_id] += score
+        return scores
 
 
-def bm25(inverted_index,tokens,k1,k3,b,N):
+def bm25(inverted_index, tokens, k1, k3, b, N):
+    """
+    use the BM25 object to get the bm25 scores
+
+    Returns:
+        sorted array of the top N (doc id,score) according to score
+    """
     b = b
-    bm = BM25(inverted_index,k1,k3,b)
+    bm = BM25(inverted_index, k1, k3, b)
     result = bm.get_scores(tokens)
-    return get_top_n(list(result.items()),N)
+    return get_top_n(list(result.items()), N)
+
 
 ###############################################################################   END
 ###############################################################################   COS SIM Body
 
 def query_get_top_N_tfidf(inverted_index, query_to_search, N=5):
     """
+    this method will calculate the cosine similarity of the query and docs,
+    with the inverted index, posting of the term, normelize dictionary of the docs,
+    and another feilds that has been save a head, to make the run time faster.
 
     Args:
-        query_to_search:
-        index:
+        inverted_index: the index we want (we will use here just with index Body)
+        query_to_search: tokens of the query
+        N: the number of documents for the retrieval
 
     Returns:
+        sorted array of the top N (doc id,score) according to score
 
     """
     result = {}  # result[doc_id] = score
-    epsilon = .0000001
-    counter = Counter(query_to_search)
-    NF_length = len(NF)
-    print("len NF:", NF_length)
+    epsilon = .0000001  # woun't be really in use. but it is for the scenario of devide zero.
     query_length = len(query_to_search)
+    tokens_counter = Counter(query_to_search)
+    NF_length = len(NF)
 
     for token in np.unique(query_to_search):
-        if token in inverted_index.df.keys():  # avoid terms that do not appear in the index.
-            tf = counter[token] / query_length  # term frequency divded by the length of the query
+        if token in inverted_index.df.keys():
             df = inverted_index.df[token]
+            tf = tokens_counter[token] / query_length
             idf = math.log10((NF_length) / (df + epsilon))
-            docs = posting_lists_reader(inverted_index,token,text_prefix)  # will return the list of docs, from byte to  [(doc_id:int, tf:int), ...]
             tfidfQ = tf * idf
+            docs = posting_lists_reader(inverted_index, token, text_prefix)
             for doc_id, doc_tf in docs:
                 tfidfD = (doc_tf / NF[doc_id]) * math.log10(NF_length / inverted_index.df[token])
                 tfidf_mul = tfidfD * tfidfQ
                 result[doc_id] = result.get(doc_id, 0) + tfidf_mul
 
     return get_top_n(result.items(), N)
+
+
 ###############################################################################   END
 
-
-
-def query_get_for_all_binary_Title(inverted_index, query_to_search,N=0):
+###############################################################################   Binary Score for Titles
+def query_get_for_all_binary_Title(inverted_index, query_to_search, N=0):
     """
+    this function will use binary search to give score of the tokens in the different titles.
+    +1 for each occasion of a token/term from the query.
+
     Args:
-        query_to_search:
-        index:
+        inverted_index: the index we want (we will use here just with index Body)
+        query_to_search: tokens of the query
+        N: the number of documents for the retrieval
 
     Returns:
+        sorted array of the top N (doc id,score) according to score
 
     """
     result = {}
@@ -251,20 +277,27 @@ def query_get_for_all_binary_Title(inverted_index, query_to_search,N=0):
                 result[doc] = result.get(doc, 0) + 1
     lst_doc = Counter(result).most_common()
 
-    if N > 0: #this is for the search method. we don't need all the titles
+    if N > 0:  # this is for the search method. we don't need all the titles
         return lst_doc[:N]
 
     return lst_doc
 
 
+###############################################################################   END
 
-def query_get_tfidf_for_all_Anchor(inverted_index, query_to_search,N=0):
+###############################################################################   Binary Score for Anchor
+def query_get_tfidf_for_all_Anchor(inverted_index, query_to_search, N=0):
     """
+    this function will use binary search to give score of the tokens in the different anchors.
+    +1 for each occasion of a token/term from the query.
+
     Args:
-        query_to_search:
-        index:
+        inverted_index: the index we want (we will use here just with index Body)
+        query_to_search: tokens of the query
+        N: the number of documents for the retrieval
 
     Returns:
+        sorted array of the top N (doc id,score) according to score
 
     """
     result = {}
@@ -277,12 +310,15 @@ def query_get_tfidf_for_all_Anchor(inverted_index, query_to_search,N=0):
 
     lst_doc = Counter(result).most_common()
 
-    if N > 0: #this is for the search method. we don't need all the anchors
+    if N > 0:  # this is for the search method. we don't need all the anchors
         return lst_doc[:N]
 
     return lst_doc
 
 
+###############################################################################   END
+
+###############################################################################   Merge function for the main search
 def search_merge_results(title_scores, body_scores, title_weight=0.5, text_weight=0.5, N=100):
     """
     This function merge and sort documents retrieved by its weighte score (e.g., title and body).
@@ -323,17 +359,24 @@ def search_merge_results(title_scores, body_scores, title_weight=0.5, text_weigh
     return sorted(result.items(), key=lambda x: x[1], reverse=True)[:N]
 
 
+###############################################################################   END
 
+###############################################################################   Flask
 from flask import Flask, request, jsonify
+
 
 class MyFlaskApp(Flask):
     def run(self, host=None, port=None, debug=None, **options):
         super(MyFlaskApp, self).run(host=host, port=port, debug=debug, **options)
 
+
 app = MyFlaskApp(__name__)
 app.config['JSONIFY_PRETTYPRINT_REGULAR'] = False
 
 
+###############################################################################   END
+
+###############################################################################   Main methods
 @app.route("/search")
 def search():
     ''' Returns up to a 100 of your best search results for the query. This is 
@@ -355,19 +398,20 @@ def search():
     res = []
     query = request.args.get('query', '')
     if len(query) == 0:
-      return jsonify(res)
+        return jsonify(res)
     # BEGIN SOLUTION
     print("search")
-    N = 100 #the number of docs i want to do the search on
+    N = 100  # the number of docs i want to do the search on
     tokens = tokenize(query.lower())
-    bestDocsBody = bm25(indexText,tokens,0.5,0.5,0.5,N)
+    bestDocsBody = bm25(indexText, tokens, 0.5, 0.5, 0.5, N)
     # bestDocsBody = query_get_top_N_tfidf(indexText, tokens, N)
-    bestDocsTitle = query_get_for_all_binary_Title(indexTitle, tokens,N)
-    bestDocs = search_merge_results(bestDocsTitle,bestDocsBody,0.5,0.5,N)
+    bestDocsTitle = query_get_for_all_binary_Title(indexTitle, tokens, N)
+    bestDocs = search_merge_results(bestDocsTitle, bestDocsBody, 0.5, 0.5, N)
     res = get_docs_title_by_id(bestDocs)
     print(res)
     # END SOLUTION
     return jsonify(res)
+
 
 @app.route("/search_body")
 def search_body():
@@ -388,15 +432,14 @@ def search_body():
     res = []
     query = request.args.get('query', '')
     if len(query) == 0:
-      return jsonify(res)
+        return jsonify(res)
     # BEGIN SOLUTION
     tokens = tokenize(query.lower())
-    bestDocs = query_get_top_N_tfidf(indexText,tokens,100)
+    bestDocs = query_get_top_N_tfidf(indexText, tokens, 100)
     res = get_docs_title_by_id(bestDocs)
-    # res = bestDocs
-    # END SOLUTION
     print(res)
     return jsonify(res)
+
 
 @app.route("/search_title")
 def search_title():
@@ -418,15 +461,14 @@ def search_title():
     res = []
     query = request.args.get('query', '')
     if len(query) == 0:
-      return jsonify(res)
+        return jsonify(res)
     tokens = tokenize(query)
     bestDocs = query_get_for_all_binary_Title(indexTitle, tokens)
     res = get_docs_title_by_id(bestDocs)
 
-    # res = bestDocs
     print(res[:5])
-    # END SOLUTION
     return jsonify(res)
+
 
 @app.route("/search_anchor")
 def search_anchor():
@@ -449,14 +491,13 @@ def search_anchor():
     res = []
     query = request.args.get('query', '')
     if len(query) == 0:
-      return jsonify(res)
-    # # BEGIN SOLUTION
+        return jsonify(res)
     tokens = tokenize(query.lower())
-    bestDocs = query_get_tfidf_for_all_Anchor(indexAnchor,tokens,100) #here we don't want to filter the tokens becuase the titles are small not like text
+    bestDocs = query_get_tfidf_for_all_Anchor(indexAnchor, tokens)
     res = get_docs_title_by_id(bestDocs)
-    # END SOLUTION
     print(res)
     return jsonify(res)
+
 
 @app.route("/get_pagerank", methods=['POST'])
 def get_pagerank():
@@ -475,16 +516,14 @@ def get_pagerank():
           list of PageRank scores that correrspond to the provided article IDs.
     '''
     res = []
-    # dict_scores = pagerank['page rank'].to_dict()
     wiki_ids = request.get_json()
     if len(wiki_ids) == 0:
-      return jsonify(res)
-    # BEGIN SOLUTION
+        return jsonify(res)
     for id in wiki_ids:
         res.append(page_ranks.get(id, 0))
-    # END SOLUTION
     print(res)
     return jsonify(res)
+
 
 @app.route("/get_pageview", methods=['POST'])
 def get_pageview():
@@ -507,18 +546,23 @@ def get_pageview():
     res = []
     wiki_ids = request.get_json()
     if len(wiki_ids) == 0:
-      return jsonify(res)
-    # BEGIN SOLUTION
+        return jsonify(res)
     for id in wiki_ids:
         res.append(page_views.get(id, 0))
-    # END SOLUTION
     print(res)
     return jsonify(res)
 
 
+########################################################################################   Expirement methods that we didn't use
+"""
+1. the first function is check for scoring the body with manipulate binary -> like the same 
+    binary but the sum up is with the frequency of the terms and not +1.
+"""
+"""
+2. the second function is check search func with including of page rank on the weights.
+    got bad result so didn'y use.
+"""
 
-
-########################################################################################   Expirement methods
 # def query_get_for_all_freq_text(inverted_index, query_to_search,N=0):
 #     """
 #     Args:
@@ -568,10 +612,6 @@ def get_pageview():
 #     print(res)
 #     # END SOLUTION
 #     return jsonify(res)
-
-
-
-
 
 
 #
