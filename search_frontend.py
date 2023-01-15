@@ -403,13 +403,19 @@ def search():
     print("search")
     N = 100  # the number of docs i want to do the search on
     tokens = tokenize(query.lower())
-    bestDocsBody = bm25(indexText, tokens, 0.5, 0.5, 0.5, N)
-    # bestDocsBody = query_get_top_N_tfidf(indexText, tokens, N)
-    bestDocsTitle = query_get_for_all_binary_Title(indexTitle, tokens, N)
-    bestDocs = search_merge_results(bestDocsTitle, bestDocsBody, 0.5, 0.5, N)
-    res = get_docs_title_by_id(bestDocs)
-    print(res)
-    # END SOLUTION
+    length_tokens = len(tokens)
+    if (length_tokens == 1):
+        bestDocsTitle = query_get_for_all_binary_Title(indexTitle, tokens, N)
+        res = get_docs_title_by_id(bestDocsTitle)
+        print(res)
+        return jsonify(res)
+
+    else:
+        bestDocsBody = bm25(indexText, tokens, 1, 0.5, 0.5, N)
+        bestDocsTitle = query_get_for_all_binary_Title(indexTitle, tokens, N)
+        bestDocs = search_merge_results(bestDocsTitle, bestDocsBody, 0.5, 0.5, N)
+        res = get_docs_title_by_id(bestDocs)
+        print(res)
     return jsonify(res)
 
 
@@ -437,7 +443,7 @@ def search_body():
     tokens = tokenize(query.lower())
     bestDocs = query_get_top_N_tfidf(indexText, tokens, 100)
     res = get_docs_title_by_id(bestDocs)
-    print(res)
+    print(res[:10])
     return jsonify(res)
 
 
@@ -466,7 +472,7 @@ def search_title():
     bestDocs = query_get_for_all_binary_Title(indexTitle, tokens)
     res = get_docs_title_by_id(bestDocs)
 
-    print(res[:5])
+    print(res[:10])
     return jsonify(res)
 
 
@@ -495,7 +501,7 @@ def search_anchor():
     tokens = tokenize(query.lower())
     bestDocs = query_get_tfidf_for_all_Anchor(indexAnchor, tokens)
     res = get_docs_title_by_id(bestDocs)
-    print(res)
+    print(res[:10])
     return jsonify(res)
 
 
@@ -521,7 +527,7 @@ def get_pagerank():
         return jsonify(res)
     for id in wiki_ids:
         res.append(page_ranks.get(id, 0))
-    print(res)
+    print(res[:10])
     return jsonify(res)
 
 
@@ -549,7 +555,7 @@ def get_pageview():
         return jsonify(res)
     for id in wiki_ids:
         res.append(page_views.get(id, 0))
-    print(res)
+    print(res[:10])
     return jsonify(res)
 
 
