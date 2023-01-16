@@ -555,6 +555,9 @@ def get_pageview():
     print(res[:10])
     return jsonify(res)
 
+if __name__ == '__main__':
+    # run the Flask RESTful API, make the server publicly available (host='0.0.0.0') on port 8080
+    app.run(host='0.0.0.0', port=8080, debug=True)
 
 ########################################################################################   Expirement methods that we didn't use
 """
@@ -699,9 +702,9 @@ def get_pageview():
 #     print(res)
 #     # END SOLUTION
 #     return jsonify(res)
-
+"""
 def search_merge_results(title_scores, body_scores, title_weight=0.5, text_weight=0.5 ,N=10):
-    """
+ 
     This function merge and sort documents retrieved by its weighte score (e.g., title and body).
 
     Parameters:
@@ -722,7 +725,7 @@ def search_merge_results(title_scores, body_scores, title_weight=0.5, text_weigh
     lst of querires and topN pairs as follows:
                                             key: query_id
                                             value: list of pairs in the following format:(doc_id,score).
-    """
+
     result = {}
 
     for k, v in title_scores:
@@ -781,8 +784,5 @@ def search_test1():
         res = get_docs_title_by_id(bestDocs)
         print(res)
     return jsonify(res)
+"""
 
-
-if __name__ == '__main__':
-    # run the Flask RESTful API, make the server publicly available (host='0.0.0.0') on port 8080
-    app.run(host='0.0.0.0', port=8080, debug=True)
