@@ -334,6 +334,7 @@ def search_merge_results_with_page_rank(title_scores, body_scores, title_weight=
                                                                             value: score
     title_weight: float, for weigted average utilizing title and body scores
     text_weight: float, for weigted average utilizing title and body scores
+    weight_page_rank: float, for weigted average utilizing title and page rank scores
     N: Integer. How many document to retrieve. This argument is passed to topN function. By default N = 100, for the topN function.
 
     Returns:
