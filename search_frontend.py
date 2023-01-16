@@ -319,7 +319,7 @@ def query_get_tfidf_for_all_Anchor(inverted_index, query_to_search, N=0):
 ###############################################################################   END
 
 ###############################################################################   Merge function for the main search
-def search_merge_results(title_scores, body_scores, title_weight=0.5, text_weight=0.5, N=100):
+def search_merge_results_with_page_rank(title_scores, body_scores, title_weight=0.5, text_weight=0.5,weight_page_rank= 1.5 ,N=10):
     """
     This function merge and sort documents retrieved by its weighte score (e.g., title and body).
 
@@ -350,11 +350,17 @@ def search_merge_results(title_scores, body_scores, title_weight=0.5, text_weigh
 
         result[k] = result[k] + (title_weight * v)
 
+        if k in page_ranks:
+             result[k] += (page_ranks[k] * weight_page_rank)
+
     for k, v in body_scores:
         if k not in result:
             result[k] = 0
 
         result[k] = result[k] + (text_weight * v)
+
+        if k in page_ranks:
+             result[k] += (page_ranks[k] * weight_page_rank)
 
     return sorted(result.items(), key=lambda x: x[1], reverse=True)[:N]
 
@@ -401,23 +407,14 @@ def search():
         return jsonify(res)
     # BEGIN SOLUTION
     print("search")
-    N = 100  # the number of docs i want to do the search on
-    tokens = tokenize(query.lower())
-    length_tokens = len(tokens)
-    if (length_tokens == 1):
-        bestDocsTitle = query_get_for_all_binary_Title(indexTitle, tokens, N)
-        res = get_docs_title_by_id(bestDocsTitle)
-        print(res)
-        return jsonify(res)
-
-    else:
-        bestDocsBody = bm25(indexText, tokens, 1, 0.5, 0.5, N)
-        bestDocsTitle = query_get_for_all_binary_Title(indexTitle, tokens, N)
-        bestDocs = search_merge_results(bestDocsTitle, bestDocsBody, 0.5, 0.5, N)
-        res = get_docs_title_by_id(bestDocs)
-        print(res)
+    N = 20  # the number of docs i want to do the search on
+    tokens = tokenize(query.lower())   
+    bestDocsBody = bm25(indexText, tokens, 1.5, 1.5, 0.75, N)
+    bestDocsTitle = query_get_for_all_binary_Title(indexTitle, tokens, N)
+    bestDocs = search_merge_results_with_page_rank(bestDocsTitle, bestDocsBody, 0.5, 0.5, 1.5, N)
+    res = get_docs_title_by_id(bestDocs)
+    print(res)
     return jsonify(res)
-
 
 @app.route("/search_body")
 def search_body():
@@ -702,6 +699,89 @@ def get_pageview():
 #     print(res)
 #     # END SOLUTION
 #     return jsonify(res)
+
+def search_merge_results(title_scores, body_scores, title_weight=0.5, text_weight=0.5 ,N=10):
+    """
+    This function merge and sort documents retrieved by its weighte score (e.g., title and body).
+
+    Parameters:
+    -----------
+    title_scores: a list of tuples build upon the title index of queries and tuples representing scores as follows:
+                                                                            key: query_id
+                                                                            value: score
+
+    body_scores: a list of tuples build upon the body/text index of queries and tuples representing scores as follows:
+                                                                            key: query_id
+                                                                            value: score
+    title_weight: float, for weigted average utilizing title and body scores
+    text_weight: float, for weigted average utilizing title and body scores
+    N: Integer. How many document to retrieve. This argument is passed to topN function. By default N = 100, for the topN function.
+
+    Returns:
+    -----------
+    lst of querires and topN pairs as follows:
+                                            key: query_id
+                                            value: list of pairs in the following format:(doc_id,score).
+    """
+    result = {}
+
+    for k, v in title_scores:
+        if k not in result:
+            result[k] = 0
+
+        result[k] = result[k] + (title_weight * v)
+
+    for k, v in body_scores:
+        if k not in result:
+            result[k] = 0
+
+        result[k] = result[k] + (text_weight * v)
+
+    return sorted(result.items(), key=lambda x: x[1], reverse=True)[:N]
+
+
+
+@app.route("/search_test1")
+def search_test1():
+    ''' Returns up to a 100 of your best search results for the query. This is 
+        the place to put forward your best search engine, and you are free to
+        implement the retrieval whoever you'd like within the bound of the 
+        project requirements (efficiency, quality, etc.). That means it is up to
+        you to decide on whether to use stemming, remove stopwords, use 
+        PageRank, query expansion, etc.
+
+        To issue a query navigate to a URL like:
+         http://YOUR_SERVER_DOMAIN/search?query=hello+world
+        where YOUR_SERVER_DOMAIN is something like XXXX-XX-XX-XX-XX.ngrok.io
+        if you're using ngrok on Colab or your external IP on GCP.
+    Returns:
+    --------
+        list of up to 100 search results, ordered from best to worst where each 
+        element is a tuple (wiki_id, title).
+    '''
+    res = []
+    query = request.args.get('query', '')
+    if len(query) == 0:
+        return jsonify(res)
+    # BEGIN SOLUTION
+    print("search")
+    N = 100  # the number of docs i want to do the search on
+    tokens = tokenize(query.lower())
+    length_tokens = len(tokens)
+    if (length_tokens == 1):
+        bestDocsTitle = query_get_for_all_binary_Title(indexTitle, tokens, N)
+        res = get_docs_title_by_id(bestDocsTitle)
+        print(res)
+        return jsonify(res)
+
+    else:
+        bestDocsBody = bm25(indexText, tokens, 1, 0.5, 0.5, N)
+        bestDocsTitle = query_get_for_all_binary_Title(indexTitle, tokens, N)
+        bestDocs = search_merge_results(bestDocsTitle, bestDocsBody, 0.5, 0.5, N)
+        res = get_docs_title_by_id(bestDocs)
+        print(res)
+    return jsonify(res)
+
 
 if __name__ == '__main__':
     # run the Flask RESTful API, make the server publicly available (host='0.0.0.0') on port 8080
